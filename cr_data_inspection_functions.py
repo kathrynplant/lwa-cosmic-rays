@@ -104,7 +104,7 @@ def parsefile(fname):
             rawpacketdata=rawfiledata[8192*p:8192*(p+1)]
             dictionary=parseheader(rawpacketdata)
             timeseries=unpackdata(rawpacketdata,'>h')
-            dictionary['data']=timeseries
+            dictionary['data']=timeseries[16:-32] #cut off the scrambled part
             records.append(dictionary)
     return records
 
