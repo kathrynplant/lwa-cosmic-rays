@@ -3,10 +3,8 @@ import pandas as pd
 import time
 import numpy as np
 import struct
-from lwa_f import snap2_fengine
-from lwa_f import blocks
 import matplotlib.pyplot as plt
-from lwa_antpos import mapping
+##from lwa_antpos import mapping  TODO: install lwa_antpos on Delphinium
 
 def printheader(rawpacketdata):
     #parse the header
