@@ -58,7 +58,7 @@ def parseheader(rawpacketdata):
     headerword=rawpacketdata[-32:]
 
     headerdictionary={}
-    headerdictionary['timestamp'] = struct.unpack('>Q',headerword[0:8])
+    headerdictionary['timestamp'] = struct.unpack('>Q',headerword[0:8])[0]
     headerdictionary['board_id'] = int(headerword[13])
     headerdictionary['this_board_triggered'] =  int(headerword[14])
     headerdictionary['coincidence_threshold'] =  int(headerword[15])
