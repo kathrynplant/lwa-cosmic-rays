@@ -113,6 +113,105 @@ def packet_ant_id_2_snap_input(i):
     #someday the need for this remapping could probably be addressed in the firmware
     return (i&0b111000)+((i+1)&0b000111)
 
+def distinguishevents(records,maxoffset):
+    #This function turns a list of single-antenna records, into a list of events.
+    #records is a list of single-antenna records, such as that returned by parsefile.
+    #maxoffset is the maximum timestamp difference (in number of clockcycles) for two records to be considered part of the same event.
+    #The function distinguish events returns a list of events, where each event is a list of the records (single-antenna dictionaries) that belong to that event.
+
+    #start an empty list which will ultimately have one element per event
+    events=[]
+    eventcount=1  #keep track of how many separate events there are
+
+    #start an list for the first event. The first record is the first element of the first event
+    currentevent=[records[0]]
+    currenteventtimestamp=records[0]['timestamp']
+
+    maxtimestamp=currenteventtimestamp+maxoffset #all 
+    for record in records:
+        recordtimestamp=record['timestamp']
+        if recordtimestamp<maxtimestamp:
+            #print(recordtimestamp, maxtimestamp,True)
+            currentevent.append(record)
+        else: #start a new event
+            #print(recordtimestamp, maxtimestamp,False)
+            eventcount+=1
+            events.append(currentevent)
+            currentevent=[record]
+            currenteventtimestamp=record['timestamp']
+            maxtimestamp=currenteventtimestamp+maxoffset
+    events.append(currentevent)
+    return events
+
+
+###Handy snapshot plotting functions
+def plot_all_timeseries(event):
+    for b in range(11):
+        singleboard=[record for record in event if record['board_id']==b+1]
+        fig=plt.figure(figsize=(20,15))
+        plt.suptitle("Board "+str(b+1)+" timestamp "+str(singleboard[0]['timestamp']))
+        for i in range(64):
+            ax=fig.add_subplot(8,8,1+i)
+            if i<len(singleboard):
+                record=singleboard[i]
+                antenna=packet_ant_id_2_snap_input(record['antenna_id']) #Get the snap2 input number
+                antname=mapping.snap2_to_antpol(b+1,antenna) #TODO zero index the boards or 1-index??
+
+                timeseries=record['data']
+                plt.plot(timeseries)
+                ax.text(.5,.5,antname,horizontalalignment='center',transform=ax.transAxes)
+            if i > 55:
+                plt.xlabel('time sample')
+            if i%8==0:
+                plt.ylabel('voltage [ADC units]')
+    return
+
+def plot_all_spectra(event):
+
+    for b in range(11):
+        singleboard=[record for record in event if record['board_id']==b+1]
+        fig=plt.figure(figsize=(20,15))
+        plt.suptitle("Board "+str(b+1)+" timestamp "+str(singleboard[0]['timestamp']))
+        for i in range(64):
+            ax=fig.add_subplot(8,8,1+i)
+            if i<len(singleboard):
+                record=singleboard[i]
+                antenna=packet_ant_id_2_snap_input(record['antenna_id']) #Get the snap2 input number
+                antname=mapping.snap2_to_antpol(b+1,antenna) #TODO zero index the boards or 1-index??
+                timeseries=record['data']
+                spec=np.fft.rfft(timeseries)
+                plt.plot(np.log(np.square(np.abs(spec))))
+                ax.text(.5,.5,antname,horizontalalignment='center',transform=ax.transAxes)
+            if i > 55:
+                plt.xlabel('frequency channel')
+            if i%8==0:
+                plt.ylabel('power')
+    return
+
+def plot_all_histograms(event):
+    for b in range(11):
+        singleboard=[record for record in event if record['board_id']==b+1]
+        fig=plt.figure(figsize=(20,15))
+        plt.suptitle("Board "+str(b+1)+" timestamp "+str(singleboard[0]['timestamp']))
+        for i in range(64):
+            ax=fig.add_subplot(8,8,1+i)
+            if i<len(singleboard):
+                record=singleboard[i]
+                antenna=packet_ant_id_2_snap_input(record['antenna_id']) #Get the snap2 input number
+                antname=mapping.snap2_to_antpol(b+1,antenna) #TODO zero index the boards or 1-index??
+
+                timeseries=record['data']
+                plt.hist(timeseries)
+                ax.text(.5,.5,antname,horizontalalignment='center',transform=ax.transAxes)
+
+            if i > 55:
+                plt.xlabel('Voltage [ADC units]')
+            if i%8==0:
+                plt.ylabel('Counts')
+    return
+
+
+
 
 
 ### NOTE THAT THIS FUNCTION IS FOR OLD FORMAT I'm leaving it here in case old-format data still needs to be used in commissioning
