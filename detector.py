@@ -32,7 +32,7 @@ class Detector:
         self.filter_interp = Akima1DInterpolator(np.arange(30., 80.1, 0.1), f['filter_array'])
         
        
-    def calculate_noise_power(self, freqs, sky_temps, df):
+    def calculate_noise_power(self, freqs, sky_temps, df, use_filter_datasheet=True):
         #freqs in MHz, sky_temps come from driftcurve script and already in K
         self.fr_fine = freqs
         self.filter = self.filter_interp(freqs)
@@ -40,7 +40,8 @@ class Detector:
         '''P_div is the power from the voltage divider'''
         P_div = np.abs(self.Z_in)**2/np.abs(self.Z_in + self.Z_re_interp(self.fr_fine)+1j*self.Z_im_interp(self.fr_fine))**2
         self.Noise = 4. * self.kB * sky_temps * self.Z_re_interp(self.fr_fine) * P_div
-        self.Noise *= self.filter
+        if use_filter_datasheet:
+            self.Noise *= self.filter
         self.Noise += self.kB*250.*np.real(self.Z_in) # 250. Kelvin internal noise
         
         self.f_c = 55.*1e6
@@ -48,7 +49,8 @@ class Detector:
         
         self.h_eff = 4. * self.Z_re_interp(self.fr_fine) / self.Z0 * lam_c**2 / 4. / np.pi 
         self.h_eff *= np.abs(self.Z_in)**2 / np.abs(self.Z_re_interp(self.fr_fine)+1j*self.Z_im_interp(self.fr_fine)+self.Z_in)**2
-        self.h_eff *= self.filter
+        if use_filter_datasheet:
+            self.h_eff *= self.filter
         self.h_eff = np.sqrt(self.h_eff)
         
         self.h_0 = np.mean(self.h_eff) # assume flat spectrum for CR pulse
