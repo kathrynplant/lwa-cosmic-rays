@@ -54,7 +54,7 @@ class Detector:
         self.h_0 = np.mean(self.h_eff) # assume flat spectrum for CR pulse
         
         self.V_rms = np.sqrt(np.sum(self.Noise * df*1.e6))
-        return self.Noise * self.Noise * df * 1.e6 * df * 1.e6
+        return self.Noise #comes out in V^2/Hz
         
     ####################################################################################
 
