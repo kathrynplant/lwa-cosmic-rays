@@ -35,7 +35,8 @@ class Detector:
     def calculate_noise_power(self, freqs, sky_temps, df, use_filter_datasheet=True):
         #freqs in MHz, sky_temps come from driftcurve script and already in K
         self.fr_fine = freqs
-        self.filter = self.filter_interp(freqs)
+        if use_filter_datasheet:
+            self.filter = self.filter_interp(freqs)
         
         '''P_div is the power from the voltage divider'''
         P_div = np.abs(self.Z_in)**2/np.abs(self.Z_in + self.Z_re_interp(self.fr_fine)+1j*self.Z_im_interp(self.fr_fine))**2
