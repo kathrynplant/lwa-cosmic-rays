@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import os
 import pandas as pd
 import time
 import numpy as np
@@ -82,28 +83,37 @@ def unpackdata(rawpacketdata,datatype):
         unpackeddata[i]=value[0] 
     return unpackeddata
 
+def read_in_chunks(file_object, chunk_size):
+    """Lazy function (generator) to read a file piece by piece.
+    taken from https://stackoverflow.com/questions/519633/lazy-method-for-reading-big-file-in-python"""
+    while True:
+        data = file_object.read(chunk_size)
+        if not data:
+            break
+        yield data
 
-def parsefile(fname):
+def parsefile(fname, start_ind=None, end_ind=None):
     #get data and header from a file (fname) with raw data from an arbitrary number of cosmic ray packets
     #returns a list of dictionaries, with one dictionary per packet
     #the data key contains a numpy array of the timeseries and the other keys are header info as specified by the parseheader function
-    with open(fname, mode="rb") as datafile:   #read the file
-         rawfiledata = datafile.read()
-    records=[]  #start a list of all the packets
-    
-    #check if there are any incomplete packets and quit if so
-    if len(rawfiledata)%8192: 
+    packet_size = 8192
+    if os.path.getsize(fname)%packet_size: 
         print("File contains incomplete packets")
         return
-    else:  #if there are no incomplete packets, proceed to parsing the packets
-        npackets=len(rawfiledata)//8192
-        print("File contains ",npackets," packets")
-        for p in range(npackets):
-            rawpacketdata=rawfiledata[8192*p:8192*(p+1)]
-            dictionary=parseheader(rawpacketdata)
-            timeseries=unpackdata(rawpacketdata,'>h')
-            dictionary['data']=timeseries[16:-32] #cut off the scrambled part
-            records.append(dictionary)
+    records = []
+    i = 0
+    if start_ind == None or start_ind < 0:
+        start_ind = 0
+    byte_start = start_ind * packet_size
+    with open(fname, mode="rb") as datafile:   #read the file
+        datafile.seek(byte_start)
+        for piece in read_in_chunks(datafile, packet_size):
+            data_dict = parseheader(piece)
+            data_dict['data'] = unpackdata(piece, '>h')[16:-32]
+            records.append(data_dict)
+            i+=1
+            if i == end_ind:
+                break
     return records
 
 def packet_ant_id_2_snap_input(i):
