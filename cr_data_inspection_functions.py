@@ -5,7 +5,7 @@ import time
 import numpy as np
 import struct
 import matplotlib.pyplot as plt
-##from lwa_antpos import mapping  TODO: install lwa_antpos on Delphinium
+from lwa_antpos import mapping  #TODO: install lwa_antpos on Delphinium
 
 def printheader(rawpacketdata):
     #parse the header
@@ -125,31 +125,132 @@ def distinguishevents(records,maxoffset):
     #This function turns a list of single-antenna records, into a list of events.
     #records is a list of single-antenna records, such as that returned by parsefile.
     #maxoffset is the maximum timestamp difference (in number of clockcycles) for two records to be considered part of the same event.
-    #The function distinguish events returns a list of events, where each event is a list of the records (single-antenna dictionaries) that belong to that event.
+    #The function distinguish events returns a list of events, where each event is a list of indices of the records (single-antenna dictionaries) that belong to that event.
 
     #start an empty list which will ultimately have one element per event
     events=[]
-    eventcount=1  #keep track of how many separate events there are
+    #eventcount=1  #keep track of how many separate events there are
 
     #start an list for the first event. The first record is the first element of the first event
-    currentevent=[records[0]]
+    #currentevent_records=[]
+    currentevent_indices=[]
+
     currenteventtimestamp=records[0]['timestamp']
 
-    maxtimestamp=currenteventtimestamp+maxoffset #all 
-    for record in records:
+    maxtimestamp=currenteventtimestamp+maxoffset #all
+    mintimestamp=currenteventtimestamp-maxoffset
+    for i,record in enumerate(records):
         recordtimestamp=record['timestamp']
-        if recordtimestamp<maxtimestamp:
+        if mintimestamp<recordtimestamp<maxtimestamp:
             #print(recordtimestamp, maxtimestamp,True)
-            currentevent.append(record)
+            #currentevent_records.append(record)
+            currentevent_indices.append(i)
         else: #start a new event
             #print(recordtimestamp, maxtimestamp,False)
-            eventcount+=1
-            events.append(currentevent)
-            currentevent=[record]
+            #eventcount+=1
+            events.append(currentevent_indices)
+            #currentevent_records=[record]
+            currentevent_indices=[i]
+
             currenteventtimestamp=record['timestamp']
             maxtimestamp=currenteventtimestamp+maxoffset
-    events.append(currentevent)
+    events.append(currentevent_indices)
     return events
+
+
+def mergepolarizations(event,arraymapdictionary):
+    xdict,ydict,zdict=arraymapdictionary
+    for record in event:
+        record['antname']=mapping.snap2_to_antpol(record['board_id'],record['antenna_id'])
+
+    merging=[record for record in event if record['antname'][-1]=='A']
+    polB=[record for record in event if record['antname'][-1]=='B']
+
+    mergedrecords=[]
+    for record in merging:
+        newrecord={} #make a new dictionary to merge the polarizations together
+        # Information that is the same for both polarizations can be filled in from the PolA record
+        antname=record['antname'][:-1]
+        newrecord['antname']=antname
+        newrecord['x']=xdict[antname]
+        newrecord['y']=ydict[antname]
+        newrecord['z']=zdict[antname]
+        newrecord['timestamp']=record['timestamp']
+        newrecord['board_id'] = record['board_id']
+        newrecord['this_board_triggered'] =  record['this_board_triggered']
+        newrecord['coincidence_threshold'] =  record['coincidence_threshold'] 
+        newrecord['veto_threshold'] =   record['veto_threshold'] 
+        newrecord['trigger_power_threshold'] = record['trigger_power_threshold']
+        newrecord['veto_power_threshold'] = record['veto_power_threshold']
+        newrecord['coincidence_window'] = record['coincidence_window']
+        newrecord['veto_coincidence_window'] = record['veto_coincidence_window'] 
+
+        #Information that is specific to POl A
+        newrecord['trigger_role_A'] = record['trigger_role']
+        newrecord['antenna_id_A'] =  record['antenna_id'] 
+        newrecord['veto_role_A'] = record['veto_role']
+        Adata = record['data']
+        newrecord['polA_data']=Adata
+        newrecord['rmsA']=np.std(Adata[:2000])
+        index_peak_A=np.argmax(np.abs(Adata))
+        newrecord['index_peak_A'] =index_peak_A
+        newrecord['peakA']=np.abs(Adata[index_peak_A]) 
+
+        #find the polB data
+        for Brecord in polB:
+            if Brecord['antname'][:-1]==antname:
+                #Information that is specific to POlB
+                newrecord['trigger_role_B'] = Brecord['trigger_role']
+                newrecord['antenna_id_B'] =  Brecord['antenna_id'] 
+                newrecord['veto_role_B'] = Brecord['veto_role']
+                Bdata = Brecord['data']
+                newrecord['polB_data']=Bdata
+                newrecord['rmsB']=np.std(Bdata[:2000]) #use only the first half to calculate the rms, before the event starts
+                index_peak_B=np.argmax(np.abs(Bdata))
+                newrecord['index_peak_B'] =index_peak_B
+                newrecord['peakB']=np.abs(Bdata[index_peak_B])   
+
+        mergedrecords.append(newrecord)
+    return mergedrecords
+
+### Arrival direction fitting
+
+
+def toa_plane(ant_coords,theta,phi):
+    #This calculates the arrival times at each antenna of a plane wave moving across the array
+    #The TOAs are returned in number of clock cycles relative to the arrival time at the zero,zero,zero coordinate
+    #theta and phi in degrees, coordinates in meters
+    #theta is the angle between the source direction and zenith. Theta=0 for a zenith source
+    #phi is the azimuth angle of the source
+    c=3e8
+    sample_rate=1.97e8 #MHz
+    phi_rad=(phi*math.pi/180)
+    theta_rad=theta*math.pi/180
+    x,y,z=ant_coords
+    
+    #calculate cartesian unit vector in the direction of the source
+    yhat=math.sin(theta_rad)*math.cos(phi_rad)
+    xhat=math.sin(theta_rad)*math.sin(phi_rad)
+    zhat=math.cos(theta_rad)
+    
+    #project all the antenna coordinates into the source direction
+    dot_product=((xhat*x)+(yhat*y)+(zhat*z))
+    
+    #convert distance to a time offset in number of clock cycles
+    time_diff=(sample_rate/c)*dot_product  
+    return time_diff
+
+def grad_toa_plane(antcoords,theta,phi):
+    #This is the gradient of toa_plane w.r.t theta and phi
+    c=3e8
+    sample_rate=1.97e8 #MHz
+    phi_rad=(phi*math.pi/180)
+    theta_rad=theta*math.pi/180
+    x,y,z=ant_coords
+
+    dtdtheta=(math.pi/180)*(sample_rate/c)*((y*math.cos(theta_rad)*math.cos(phi_rad))+(x*math.cos(theta_rad)*math.cos(phi_rad))-(z*math.sin(theta_rad)))
+    dtdphi=(math.pi/180)*(sample_rate/c)*((-y*math.sin(theta_rad)*math.sin(phi_rad)) +(x*math.sin(theta_rad)*math.cos(phi_rad)))
+    return np.asarray([dtdtheta,dtdphi]).transpose()
 
 
 ###Handy snapshot plotting functions
@@ -218,7 +319,126 @@ def plot_all_histograms(event):
                 plt.ylabel('Counts')
     return
 
+def plot_select_antennas(event,antennas):
+    #Event is a list of records (single-packet dictionaries) belonging to the same event
+    #antennas is a list where each element in the list is a tuple of format (s,a) where s is the index of the snap board and a is the index of the antenna to plot
+    #If a requested antenna to plot is not in the list (which happens if that packet has been lost), the missing antenna is skipped
+    #The requested antennas are plotted in the order they appear in event, not in the order of the input list
+    for record in event:
+        s=record['board_id']
+        a=record['antenna_id']
+        antname=mapping.snap2_to_antpol(s,a)
+        if (s,a) in antennas:
+            timeseries=record['data']
+            plt.figure(figsize=(20,5))
+            plt.suptitle(antname + ' snap '+ str(s) + ' antenna ' + str(a))
+            
+            plt.subplot(131)
+            plt.plot(timeseries)
+            plt.xlabel('time sample')
+            plt.ylabel('voltage [ADC units]')
 
+            plt.subplot(132)
+            plt.hist(timeseries)
+            plt.xlabel('Voltage [ADC units]')
+            plt.ylabel('Counts')
+
+            plt.subplot(133)
+            plt.xlabel('frequency channel')
+            plt.ylabel('power')
+            spec=np.fft.rfft(timeseries)
+            plt.plot(np.log(np.square(np.abs(spec))))     
+    return
+
+
+def plot_peak_to_rms_ratio(peak_to_rmsA,cutA,peak_to_rmsB,cutB,xcoords,ycoords,cmin,cmax):
+    plt.figure(figsize=(10,10))
+    plt.suptitle('Ratio of Peak absolute value to RMS, good antennas only')
+    plt.subplot(221)
+    plt.title("Polarization A ")
+    plt.scatter(xcoords[cutA],ycoords[cutA],c=peak_to_rmsA[cutA])
+    plt.colorbar()
+    plt.clim(cmin,cmax)
+    plt.ylabel('North-South position [m]')
+
+    plt.subplot(222)
+    plt.title("Polarization A --zoom in")
+    plt.scatter(xcoords[cutA],ycoords[cutA],c=peak_to_rmsA[cutA])
+    plt.xlim(-200,200)
+    plt.ylim(-200,200)
+    plt.colorbar(label='ADC units')
+    plt.clim(cmin,cmax)
+
+    plt.subplot(223)
+    plt.title("Polarization B ")
+    plt.scatter(xcoords[cutB],ycoords[cutB],c=peak_to_rmsB[cutB])
+    plt.colorbar()
+    plt.clim(cmin,cmax)
+    plt.xlabel('East-West position [m]')
+    plt.ylabel('North-South position [m]')
+
+    plt.subplot(224)
+    plt.title("Polarization B -- zoom in")
+    plt.scatter(xcoords[cutB],ycoords[cutB],c=peak_to_rmsB[cutB])
+    plt.xlim(-200,200)
+    plt.ylim(-200,200)
+    plt.colorbar(label='ADC units')
+    plt.clim(cmin,cmax)
+    plt.xlabel('East-West position [m]')
+    return
+
+
+def plot_fit(x,y,toa_data,best_model_toas,residual,czoom_min,czoom_max,title):
+    plt.figure(figsize=(15,10))
+    plt.suptitle(title)
+    plt.subplot(231)
+    plt.axes='equal'
+    plt.scatter(x,y,c=toa_data)
+    plt.colorbar()
+    plt.title('Observed relative TOAs')
+
+    plt.subplot(232)
+    plt.axes='equal'
+    plt.scatter(x,y,c=best_model_toas)
+    plt.colorbar()
+    plt.title('Best fit model toas')
+
+
+    plt.subplot(233)
+    plt.axes='equal'
+    plt.scatter(x,y,c=residual)
+    plt.colorbar()
+    plt.title('Residual')
+
+
+    plt.subplot(234)
+    plt.axes='equal'
+    plt.scatter(x,y,c=toa_data)
+    plt.colorbar()
+    plt.xlim(-200,200)
+    plt.ylim(-200,200)
+    plt.clim(czoom_min,czoom_max)
+    plt.title('Observed relative TOAs')
+
+
+    plt.subplot(235)
+    plt.axes='equal'
+    plt.scatter(x,y,c=best_model_toas)
+    plt.colorbar()
+    plt.xlim(-200,200)
+    plt.ylim(-200,200)
+    plt.clim(czoom_min,czoom_max)
+    plt.title('Best fit model toas')
+
+
+    plt.subplot(236)
+    plt.axes='equal'
+    plt.scatter(x,y,c=residual)
+    plt.colorbar()
+    plt.xlim(-200,200)
+    plt.ylim(-200,200)
+    plt.clim(czoom_min,czoom_max)
+    plt.title('Residual')
 
 
 
