@@ -6,6 +6,8 @@ import numpy as np
 import struct
 import matplotlib.pyplot as plt
 from lwa_antpos import mapping  #TODO: install lwa_antpos on Delphinium
+import math
+from scipy.optimize import curve_fit
 
 def printheader(rawpacketdata):
     #parse the header
@@ -240,7 +242,7 @@ def toa_plane(ant_coords,theta,phi):
     time_diff=(sample_rate/c)*dot_product  
     return time_diff
 
-def grad_toa_plane(antcoords,theta,phi):
+def grad_toa_plane(ant_coords,theta,phi):
     #This is the gradient of toa_plane w.r.t theta and phi
     c=3e8
     sample_rate=1.97e8 #MHz
@@ -403,13 +405,11 @@ def plot_fit(x,y,toa_data,best_model_toas,residual,czoom_min,czoom_max,title):
     plt.colorbar()
     plt.title('Best fit model toas')
 
-
     plt.subplot(233)
     plt.axes='equal'
     plt.scatter(x,y,c=residual)
     plt.colorbar()
     plt.title('Residual')
-
 
     plt.subplot(234)
     plt.axes='equal'
@@ -420,7 +420,6 @@ def plot_fit(x,y,toa_data,best_model_toas,residual,czoom_min,czoom_max,title):
     plt.clim(czoom_min,czoom_max)
     plt.title('Observed relative TOAs')
 
-
     plt.subplot(235)
     plt.axes='equal'
     plt.scatter(x,y,c=best_model_toas)
@@ -430,16 +429,14 @@ def plot_fit(x,y,toa_data,best_model_toas,residual,czoom_min,czoom_max,title):
     plt.clim(czoom_min,czoom_max)
     plt.title('Best fit model toas')
 
-
     plt.subplot(236)
     plt.axes='equal'
     plt.scatter(x,y,c=residual)
     plt.colorbar()
     plt.xlim(-200,200)
     plt.ylim(-200,200)
-    plt.clim(czoom_min,czoom_max)
+    #plt.clim(czoom_min,czoom_max)
     plt.title('Residual')
-
 
 
 ### NOTE THAT THIS FUNCTION IS FOR OLD FORMAT I'm leaving it here in case old-format data still needs to be used in commissioning
