@@ -254,8 +254,324 @@ def grad_toa_plane(ant_coords,theta,phi):
     dtdphi=(math.pi/180)*(sample_rate/c)*((-y*math.sin(theta_rad)*math.sin(phi_rad)) +(x*math.sin(theta_rad)*math.cos(phi_rad)))
     return np.asarray([dtdtheta,dtdphi]).transpose()
 
+def rank_by_snr(event,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1):
+    # Return a list of antenna names and snrs in order from strongest snr to smallest , in separate rankings for each polarization and for core and distant antennas
+    #Event is a list of records (single-packet dictionaries) belonging to the same event
+    #Only antennas with signals (in the first half of the buffer) that satisfy the specified rms and kurtosis cuts are included in the ranking
+    
+    mergedrecords=mergepolarizations(event,arraymapdictionaries)
 
-###Handy snapshot plotting functions
+    xcoords=np.asarray([record['x'] for record in mergedrecords])
+    ycoords=np.asarray([record['y'] for record in mergedrecords])
+    zcoords=np.asarray([record['z'] for record in mergedrecords])
+    antnames=[record['antname'] for record in mergedrecords]
+    #get rms and peak to rms ratio
+    rmsA=np.asarray([record['rmsA'] for record in mergedrecords])
+    peakA=np.asarray([record['peakA'] for record in mergedrecords])
+    rmsB=np.asarray([record['rmsB'] for record in mergedrecords])
+    peakB=np.asarray([record['peakB'] for record in mergedrecords])
+
+    peak_to_rmsA=peakA/rmsA
+    peak_to_rmsB=peakB/rmsB
+    
+    #get kurtosis before event
+    kurtosisA=np.asarray([st.kurtosis(record['polA_data'][:2000]) for record in mergedrecords])
+    kurtosisB=np.asarray([st.kurtosis(record['polB_data'][:2000]) for record in mergedrecords])
+
+    #define antenna cut based on rms 
+    cut_rmsA = np.logical_and(rmsA >minimum_ok_rms, rmsA <maximum_ok_rms)
+    cut_rmsB = np.logical_and(rmsB >minimum_ok_rms, rmsB <maximum_ok_rms)
+    
+    #define antenna cut based on kurtosis
+    cut_kurtosisA = np.logical_and(kurtosisA >minimum_ok_kurtosis, kurtosisA <maximum_ok_kurtosis)
+    cut_kurtosisB = np.logical_and(kurtosisB >minimum_ok_kurtosis, kurtosisB <maximum_ok_kurtosis)
+
+    #combine antenna cuts
+    cutA=np.logical_and(cut_rmsA,cut_kurtosisA)
+    cutB=np.logical_and(cut_rmsB,cut_kurtosisB)
+
+    
+    select_core_antennas=(xcoords**2)+(ycoords**2)<(150**2)
+    select_far_antennas=(xcoords**2)+(ycoords**2)>(250**2)  #note the core vs far cuts used in plotting are different than what's used for estimating if event is concentrated on core
+    
+    #apply antenna quality cuts
+    peak_to_rmsA_good_core=peak_to_rmsA[np.logical_and(cutA,select_core_antennas)]    
+    ants_good_core_A=[antnames[i]+'A' for i in range(len(antnames)) if (cutA[i] and select_core_antennas[i]) ]
+    peak_to_rmsB_good_core=peak_to_rmsB[np.logical_and(cutB,select_core_antennas)]
+    ants_good_core_B=[antnames[i]+'B' for i in range(len(antnames)) if (cutB[i] and select_core_antennas[i]) ]
+    peak_to_rmsA_good_far=peak_to_rmsA[np.logical_and(cutA,select_far_antennas)]
+    ants_good_far_A=[antnames[i]+'A' for i in range(len(antnames)) if (cutA[i] and select_far_antennas[i])]
+    peak_to_rmsB_good_far=peak_to_rmsB[np.logical_and(cutB,select_far_antennas)]
+    ants_good_far_B=[antnames[i]+'B' for i in range(len(antnames)) if (cutB[i] and select_far_antennas[i])]
+
+    # sort by snr and take the top 5 in each category
+    Z = [x for _,x in sorted(zip(testnumbers,teststrings),reverse=True)]
+    
+    ranked_core_A_pol=[pair for pair in sorted(zip(peak_to_rmsA_good_core,ants_good_core_A),reverse=True)]
+    ranked_core_B_pol=[pair for pair in sorted(zip(peak_to_rmsB_good_core,ants_good_core_B),reverse=True)]
+    ranked_far_A_pol=[pair for pair in sorted(zip(peak_to_rmsA_good_far,ants_good_far_A),reverse=True)]
+    ranked_far_B_pol=[pair for pair in sorted(zip(peak_to_rmsB_good_far,ants_good_far_B),reverse=True)]
+    
+    return ranked_core_A_pol,ranked_core_B_pol,ranked_far_A_pol,ranked_far_B_pol
+
+########################## snapshot plotting functions  ##########################################################
+
+def plot_timeseries(event,antenna_names,zoom='peak'):
+    #Event is a list of records (single-packet dictionaries) belonging to the same event
+    #antennas is a list where each element in the list is a tuple of format (s,a) where s is the index of the snap board and a is the index of the antenna to plot
+    #If a requested antenna to plot is not in the list (which happens if that packet has been lost), the missing antenna is skipped
+    #The requested antennas are plotted in the order they appear in event, not in the order of the input list
+    #zoom is either the string 'peak' or a tuple specifying the range of samples to restrict the x axis to
+    for record in event:
+        s=record['board_id']
+        a=record['antenna_id']
+        antname=mapping.snap2_to_antpol(s,a)
+        if antname in antenna_names:
+            timeseries=record['data']
+            rms=np.std(timeseries[:2000])
+            kurtosis=st.kurtosis(timeseries[:2000])
+            peak=np.max(np.abs(timeseries))
+            plt.figure(figsize=(20,5))
+            plt.suptitle(antname + ' snap input '+ str(s) +','+ str(a) + ' peak='+str(peak)+' rms='+str(round(rms,3))+' kurtosis='+str(round(kurtosis,3))+' peak/rms='+str(round(peak/rms,3)))
+            
+            plt.subplot(121)
+            plt.plot(timeseries)
+            plt.xlabel('time sample')
+            plt.ylabel('voltage [ADC units]')
+
+            plt.subplot(122)
+            plt.plot(timeseries)
+            plt.xlabel('time sample')
+            plt.ylabel('voltage [ADC units]')
+            if zoom=='peak':
+                plt.xlim(np.argmax(timeseries)-50,np.argmax(timeseries)+150)
+            else:
+                plt.xlim(zoom[0],zoom[1])
+            
+    return
+
+def plot_event_peak_to_rms(event,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,annotate=False):
+    #Plots the peak to rms ratio for each polarization of an event, over the antenna positions of the array
+    #Event is a list of records (single-packet dictionaries) belonging to the same event
+    #Antennas are filtered to only plot antennas whose signals (in the first half of the buffer) are within the
+    #bounds set by minimum_ok_rms, maximum_ok_rms, minimum_ok_kurtosis, maximum_ok_kurtosis
+    #Antennas are labelled if annotate=True
+    
+    mergedrecords=mergepolarizations(event,arraymapdictionaries)
+
+    xcoords=np.asarray([record['x'] for record in mergedrecords])
+    ycoords=np.asarray([record['y'] for record in mergedrecords])
+    zcoords=np.asarray([record['z'] for record in mergedrecords])
+    antnames=[record['antname'] for record in mergedrecords]
+    #get rms and peak to rms ratio
+    rmsA=np.asarray([record['rmsA'] for record in mergedrecords])
+    peakA=np.asarray([record['peakA'] for record in mergedrecords])
+    rmsB=np.asarray([record['rmsB'] for record in mergedrecords])
+    peakB=np.asarray([record['peakB'] for record in mergedrecords])
+
+    peak_to_rmsA=peakA/rmsA
+    peak_to_rmsB=peakB/rmsB
+    
+    #get kurtosis before event
+    kurtosisA=np.asarray([st.kurtosis(record['polA_data'][:2000]) for record in mergedrecords])
+    kurtosisB=np.asarray([st.kurtosis(record['polB_data'][:2000]) for record in mergedrecords])
+
+    #define antenna cut based on rms 
+    cut_rmsA = np.logical_and(rmsA >minimum_ok_rms, rmsA <maximum_ok_rms)
+    cut_rmsB = np.logical_and(rmsB >minimum_ok_rms, rmsB <maximum_ok_rms)
+    
+    #define antenna cut based on kurtosis
+    cut_kurtosisA = np.logical_and(kurtosisA >minimum_ok_kurtosis, kurtosisA <maximum_ok_kurtosis)
+    cut_kurtosisB = np.logical_and(kurtosisB >minimum_ok_kurtosis, kurtosisB <maximum_ok_kurtosis)
+
+    #combine antenna cuts
+    cutA=np.logical_and(cut_rmsA,cut_kurtosisA)
+    cutB=np.logical_and(cut_rmsB,cut_kurtosisB)
+
+    
+    select_core_antennas=(xcoords**2)+(ycoords**2)<(115**2)
+    select_far_antennas=(xcoords**2)+(ycoords**2)>(115**2)  #note the core vs far cuts used in plotting are different than what's used for estimating if event is concentrated on core
+    
+
+    plt.figure(figsize=(15,15))
+    plt.suptitle('Ratio of Peak absolute value to RMS, good antennas only')
+    plt.subplot(221)
+    plt.title("Polarization A ")
+    plt.scatter(xcoords[cutA],ycoords[cutA],c=peak_to_rmsA[cutA])
+    plt.colorbar()
+    plt.ylabel('North-South position [m]')
+    if annotate:
+        for i in range(len(antnames)):
+            if cutA[i] and select_far_antennas[i]:
+                txt=antnames[i]
+                x=xcoords[i]
+                y=ycoords[i]
+                plt.annotate(txt[3:], (x, y))
+    
+    plt.subplot(222)
+    plt.title("Polarization A --zoom in")
+    plt.scatter(xcoords[cutA],ycoords[cutA],c=peak_to_rmsA[cutA])
+    plt.xlim(-105,105)
+    plt.ylim(-105,105)
+    plt.colorbar(label='peak/rms')
+    #plt.clim(cmin,cmax)
+    if annotate:
+        for i in range(len(antnames)):
+            if cutA[i] and select_core_antennas[i]:
+                txt=antnames[i]
+                x=xcoords[i]
+                y=ycoords[i]
+                plt.text(x,y,txt[3:],fontsize='x-small')
+                
+    plt.subplot(223)
+    plt.title("Polarization B ")
+    plt.scatter(xcoords[cutB],ycoords[cutB],c=peak_to_rmsB[cutB])
+    plt.colorbar()
+    plt.xlabel('East-West position [m]')
+    plt.ylabel('North-South position [m]')
+    if annotate:
+        for i in range(len(antnames)):
+            if cutB[i] and select_far_antennas[i]:
+                txt=antnames[i]
+                x=xcoords[i]
+                y=ycoords[i]
+                plt.annotate(txt[3:], (x, y))
+
+    plt.subplot(224)
+    plt.title("Polarization B -- zoom in")
+    plt.scatter(xcoords[cutB],ycoords[cutB],c=peak_to_rmsB[cutB])
+    plt.xlim(-105,105)
+    plt.ylim(-105,105)
+    plt.colorbar(label='peak/rms')
+    plt.xlabel('East-West position [m]')
+    
+    if annotate:
+        for i in range(len(antnames)):
+            if cutB[i] and select_core_antennas[i]:
+                txt=antnames[i]
+                x=xcoords[i]
+                y=ycoords[i]
+                plt.text(x,y,txt[3:],fontsize='x-small')
+
+    return
+
+def plot_event_toas(event,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,annotate=False):
+    #Plots the time of arrival for each antenna and polarization of an event, over the antenna positions of the array
+    #time of arrival is in units of clock cycles with respect to the earliest packet timestamp in the event
+    #Event is a list of records (single-packet dictionaries) belonging to the same event
+    #Antennas are filtered to only plot antennas whose signals (in the first half of the buffer) are within the
+    #bounds set by minimum_ok_rms, maximum_ok_rms, minimum_ok_kurtosis, maximum_ok_kurtosis
+    #Antennas are labelled if annotate=True
+    
+    mergedrecords=mergepolarizations(event,arraymapdictionaries)
+
+    xcoords=np.asarray([record['x'] for record in mergedrecords])
+    ycoords=np.asarray([record['y'] for record in mergedrecords])
+    zcoords=np.asarray([record['z'] for record in mergedrecords])
+    antnames=[record['antname'] for record in mergedrecords]
+    #get rms 
+    rmsA=np.asarray([record['rmsA'] for record in mergedrecords])
+    rmsB=np.asarray([record['rmsB'] for record in mergedrecords])
+
+    #get time of peak
+    index_peak_A=np.asarray([record['index_peak_A'] for record in mergedrecords])
+    index_peak_B=np.asarray([record['index_peak_B'] for record in mergedrecords])
+    timestamps=np.asarray([record['timestamp'] for record in mergedrecords])
+    min_time=np.min(timestamps)
+
+    t_rel_A=index_peak_A + timestamps - min_time
+    t_rel_B=index_peak_B + timestamps - min_time
+    
+    
+    #get kurtosis before event
+    kurtosisA=np.asarray([st.kurtosis(record['polA_data'][:2000]) for record in mergedrecords])
+    kurtosisB=np.asarray([st.kurtosis(record['polB_data'][:2000]) for record in mergedrecords])
+
+    #define antenna cut based on rms 
+    cut_rmsA = np.logical_and(rmsA >minimum_ok_rms, rmsA <maximum_ok_rms)
+    cut_rmsB = np.logical_and(rmsB >minimum_ok_rms, rmsB <maximum_ok_rms)
+    
+    #define antenna cut based on kurtosis
+    cut_kurtosisA = np.logical_and(kurtosisA >minimum_ok_kurtosis, kurtosisA <maximum_ok_kurtosis)
+    cut_kurtosisB = np.logical_and(kurtosisB >minimum_ok_kurtosis, kurtosisB <maximum_ok_kurtosis)
+
+    #combine antenna cuts
+    cutA=np.logical_and(cut_rmsA,cut_kurtosisA)
+    cutB=np.logical_and(cut_rmsB,cut_kurtosisB)
+
+    
+    select_core_antennas=(xcoords**2)+(ycoords**2)<(115**2)
+    select_far_antennas=(xcoords**2)+(ycoords**2)>(115**2)  #note the core vs far cuts used in plotting are different than what's used for estimating if event is concentrated on core
+    
+
+    plt.figure(figsize=(15,15))
+    plt.suptitle('Time of Peak, good antennas only')
+    plt.subplot(221)
+    plt.title("Polarization A ")
+    plt.scatter(xcoords[cutA],ycoords[cutA],c=t_rel_A[cutA])
+    plt.colorbar()
+    plt.clim(np.median(t_rel_B[cutB])-700,np.median(t_rel_B[cutB])+700)
+    plt.ylabel('North-South position [m]')
+    if annotate:
+        for i in range(len(antnames)):
+            if cutA[i] and select_far_antennas[i]:
+                txt=antnames[i]
+                x=xcoords[i]
+                y=ycoords[i]
+                plt.annotate(txt[3:], (x, y))
+    
+    plt.subplot(222)
+    plt.title("Polarization A --zoom in")
+    plt.scatter(xcoords[cutA],ycoords[cutA],c=t_rel_A[cutA])
+    plt.xlim(-105,105)
+    plt.ylim(-105,105)
+    plt.colorbar(label='time sample')
+    plt.clim(np.median(t_rel_A[cutA])-75,np.median(t_rel_A[cutA])+75)
+    if annotate:
+        for i in range(len(antnames)):
+            if cutA[i] and select_core_antennas[i]:
+                txt=antnames[i]
+                x=xcoords[i]
+                y=ycoords[i]
+                plt.text(x,y,txt[3:],fontsize='x-small')
+                
+    plt.subplot(223)
+    plt.title("Polarization B ")
+    plt.scatter(xcoords[cutB],ycoords[cutB],c=t_rel_B[cutB])
+    plt.colorbar()
+    plt.clim(np.median(t_rel_B[cutB])-700,np.median(t_rel_B[cutB])+700)
+
+    plt.xlabel('East-West position [m]')
+    plt.ylabel('North-South position [m]')
+    if annotate:
+        for i in range(len(antnames)):
+            if cutB[i] and select_far_antennas[i]:
+                txt=antnames[i]
+                x=xcoords[i]
+                y=ycoords[i]
+                plt.annotate(txt[3:], (x, y))
+
+    plt.subplot(224)
+    plt.title("Polarization B -- zoom in")
+    plt.scatter(xcoords[cutB],ycoords[cutB],c=t_rel_B[cutB])
+    plt.xlim(-105,105)
+    plt.ylim(-105,105)
+    plt.colorbar(label='time sample')
+    plt.clim(np.median(t_rel_B[cutB])-75,np.median(t_rel_B[cutB])+75)
+    plt.xlabel('East-West position [m]')
+    
+    if annotate:
+        for i in range(len(antnames)):
+            if cutB[i] and select_core_antennas[i]:
+                txt=antnames[i]
+                x=xcoords[i]
+                y=ycoords[i]
+                plt.text(x,y,txt[3:],fontsize='x-small')
+
+    return
+
+
+
 def plot_all_timeseries(event):
     for b in range(11):
         singleboard=[record for record in event if record['board_id']==b+1]
@@ -439,6 +755,7 @@ def plot_fit(x,y,toa_data,best_model_toas,residual,czoom_min,czoom_max,title):
     plt.title('Residual')
 
 
+    
 ### NOTE THAT THIS FUNCTION IS FOR OLD FORMAT I'm leaving it here in case old-format data still needs to be used in commissioning
 def single_board_snapshot_summary_plots(fname,boardnumber):
     #plot spectra
