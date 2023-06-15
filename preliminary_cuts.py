@@ -17,11 +17,11 @@ args=parser.parse_args()
 fname = args.fname
 
 #### set parameters -- eventually this could be read from a config file ######################################
-datadir='/data0/cosmic-ray-data/2023May3/'  #directory where fname is
 
 #where to save data products
 outdir='/data0/cosmic-ray-data/2023May3-dataproducts/'
-
+datadir ='/data0/cosmic-ray-data/2023May3/' #path to fname
+shortfname=fname[len(datadir):]
 #name of csv file with antenna names and coordinates: Columns must have headings 'antname', 'x', 'y', 'elevation'
 array_map_filename='/home/ubuntu/kp/lwa-cosmic-rays/array-map-5-22-2023.csv'
 
@@ -50,6 +50,8 @@ records = parsefile(fname)
 
 ###################### Organize list of single-antenna records into list of events ############################################
 events=distinguishevents(records,200)
+complete_events=[event for event in events if len(event)==704]
+
 total=len(events)
 records_per_event=np.asarray([len(e) for e in events])
 complete_events_count=np.sum(records_per_event==704)
@@ -225,30 +227,30 @@ n_selected2=len(select_events2)
 
 ###############Save info on cuts################################
 
-print(fname, total, complete_events_count, incomplete_events_count, scrambled_complete_events,rms_change_cut.sum(),veto_cut,max_distant_vs_core_cut.sum(),top5_distant_vs_core_cut.sum(),distant_vs_core_cut, n_selected1,n_selected2 )
+print(shortfname, total, complete_events_count, incomplete_events_count, scrambled_complete_events,rms_change_cut.sum(),veto_cut.sum(),max_distant_vs_core_cut.sum(),top5_distant_vs_core_cut.sum(),distant_vs_core_cut2.sum(), n_selected1,n_selected2 )
 
 
-np.save(outdir+fname[:-3]+'records_per_event',np.asarray([len(e) for e in events]))
-np.save(outdir+fname[:-3]+'n_strong_detectionsA',n_strong_detectionsA)
-np.save(outdir+fname[:-3]+'n_strong_detectionsB',n_strong_detectionsB)
-np.save(outdir+fname[:-3]+'n_veto_detections',n_veto_detections)
-np.save(outdir+fname[:-3]+'max_core_vs_far_ratioB',max_core_vs_far_ratioB)
-np.save(outdir+fname[:-3]+'max_core_vs_far_ratioA',max_core_vs_far_ratioA)
+np.save(outdir+shortfname[:-3]+'records_per_event',np.asarray([len(e) for e in events]))
+np.save(outdir+shortfname[:-3]+'n_strong_detectionsA',n_strong_detectionsA)
+np.save(outdir+shortfname[:-3]+'n_strong_detectionsB',n_strong_detectionsB)
+np.save(outdir+shortfname[:-3]+'n_veto_detections',n_veto_detections)
+np.save(outdir+shortfname[:-3]+'max_core_vs_far_ratioB',max_core_vs_far_ratioB)
+np.save(outdir+shortfname[:-3]+'max_core_vs_far_ratioA',max_core_vs_far_ratioA)
 
-np.save(outdir+fname[:-3]+'rms_ratioA',rms_ratioA)
-np.save(outdir+fname[:-3]+'rms_ratioB',rms_ratioB)
-np.save(outdir+fname[:-3]+'sum_top_5_core_vs_far_ratioA',sum_top_5_core_vs_far_ratioA)
-np.save(outdir+fname[:-3]+'sum_top_5_core_vs_far_ratioB',sum_top_5_core_vs_far_ratioB)
+np.save(outdir+shortfname[:-3]+'rms_ratioA',rms_ratioA)
+np.save(outdir+shortfname[:-3]+'rms_ratioB',rms_ratioB)
+np.save(outdir+shortfname[:-3]+'sum_top_5_core_vs_far_ratioA',sum_top_5_core_vs_far_ratioA)
+np.save(outdir+shortfname[:-3]+'sum_top_5_core_vs_far_ratioB',sum_top_5_core_vs_far_ratioB)
 
 ############################ Save Indices of Selected Events ################################
 indices_to_save=[]
 for e in select_events1:
     if (e==[n for n in range(np.min(e),np.min(e)+704)]):
         indices_to_save.append(e[0])
-np.save(outdir+fname[:-3]+'indices_cuts1',np.asarray(indices_to_save))
+np.save(outdir+shortfname[:-3]+'indices_cuts1',np.asarray(indices_to_save))
 
 indices_to_save=[]
 for e in select_events2:
     if (e==[n for n in range(np.min(e),np.min(e)+704)]):
         indices_to_save.append(e[0])
-np.save(outdir+fname[:-3]+'indices_cuts2',np.asarray(indices_to_save))
+np.save(outdir+shortfname[:-3]+'indices_cuts2',np.asarray(indices_to_save))
