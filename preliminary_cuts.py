@@ -19,16 +19,17 @@ fname = args.fname
 #### set parameters -- eventually this could be read from a config file ######################################
 
 #where to save data products
-outdir='/data0/cosmic-ray-data/2023May3-dataproducts/'
-datadir ='/data0/cosmic-ray-data/2023May3/' #path to fname
+if fname[:6]=='/data0':
+    outdir='/data0/cosmic-ray-data/2023June20-data-products/'
+    datadir ='/data0/cosmic-ray-data/2023June20/' #path to fname
+
+elif fname[:6]=='/data1':
+    outdir='/data0/cosmic-ray-data/2023June20-data-products/'
+    datadir ='/data0/cosmic-ray-data/2023June20/' #path to fname
+
 shortfname=fname[len(datadir):]
 #name of csv file with antenna names and coordinates: Columns must have headings 'antname', 'x', 'y', 'elevation'
 array_map_filename='/home/ubuntu/kp/lwa-cosmic-rays/array-map-5-22-2023.csv'
-
-#veto setup at the time the data was collected
-veto_names=['LWA-316', 'LWA-334', 'LWA-328', 'LWA-326', 'LWA-322', 'LWA-333']
-veto_threshold=200 #200 is what was set at the time the data was recorded
-
 #parameters for antenna-based cuts
 maximum_ok_rms=45
 minimum_ok_rms=25
@@ -97,16 +98,15 @@ for i,event_indices in enumerate(complete_events):
     xcoords=np.asarray([record['x'] for record in mergedrecords])
     ycoords=np.asarray([record['y'] for record in mergedrecords])
     zcoords=np.asarray([record['z'] for record in mergedrecords])
-    
+   
     #get rms and peak to rms ratio
     rmsA=np.asarray([record['rmsA'] for record in mergedrecords])
     peakA=np.asarray([record['peakA'] for record in mergedrecords])
     rmsB=np.asarray([record['rmsB'] for record in mergedrecords])
     peakB=np.asarray([record['peakB'] for record in mergedrecords])
-
     peak_to_rmsA=peakA/rmsA
     peak_to_rmsB=peakB/rmsB
-    
+
     #get kurtosis before event
     kurtosisA=np.asarray([st.kurtosis(record['polA_data'][:2000]) for record in mergedrecords])
     kurtosisB=np.asarray([st.kurtosis(record['polB_data'][:2000]) for record in mergedrecords])
@@ -149,9 +149,16 @@ for i,event_indices in enumerate(complete_events):
         rms_ratioB[i]=-1
 
     ## calculate number of veto detections among all the veto antennas that were used at the time
-    select_veto_antennas=np.asarray([record['antname'] in veto_names for record in mergedrecords])
-    veto_detectionsA=np.logical_and(peakA>veto_threshold,select_veto_antennas)
-    veto_detectionsB=np.logical_and(peakB>veto_threshold,select_veto_antennas)
+    
+    veto_thresholdA=np.asarray([(record['veto_power_threshold'][0])**0.5 for record in mergedrecords])
+    veto_thresholdB=np.asarray([(record['veto_power_threshold'][0])**0.5 for record in mergedrecords])
+    select_veto_antennasA=np.asarray([record['veto_role_A'] for record in mergedrecords])
+    select_veto_antennasB=np.asarray([record['veto_role_B'] for record in mergedrecords])
+
+    veto_detectionsA=np.logical_and(peakA>veto_thresholdA,select_veto_antennasA)
+    veto_detectionsB=np.logical_and(peakB>veto_thresholdB,select_veto_antennasB)
+    n_veto_detections[i]=np.sum(veto_detectionsA)+np.sum(veto_detectionsB) #count how many of both polarizations detected it
+    
     n_veto_detections[i]=np.sum(veto_detectionsA)+np.sum(veto_detectionsB) #count how many of both polarizations detected it
     
     ## calculate ratio of peak/rms in core vs outriggers
@@ -235,6 +242,16 @@ np.save(outdir+shortfname[:-3]+'n_strong_detectionsA',n_strong_detectionsA)
 np.save(outdir+shortfname[:-3]+'n_strong_detectionsB',n_strong_detectionsB)
 np.save(outdir+shortfname[:-3]+'n_veto_detections',n_veto_detections)
 np.save(outdir+shortfname[:-3]+'max_core_vs_far_ratioB',max_core_vs_far_ratioB)
+np.save(outdir+shortfname[:-3]+'max_core_vs_far_ratioA',max_core_vs_far_ratioA)
+
+np.save(outdir+shortfname[:-3]+'rms_ratioA',rms_ratioA)
+np.save(outdir+shortfname[:-3]+'rms_ratioB',rms_ratioB)
+np.save(outdir+shortfname[:-3]+'sum_top_5_core_vs_far_ratioA',sum_top_5_core_vs_far_ratioA)
+np.save(outdir+shortfname[:-3]+'max_core_vs_far_ratioA',max_core_vs_far_ratioA)
+
+np.save(outdir+shortfname[:-3]+'rms_ratioA',rms_ratioA)
+np.save(outdir+shortfname[:-3]+'rms_ratioB',rms_ratioB)
+np.save(outdir+shortfname[:-3]+'sum_top_5_core_vs_far_ratioA',sum_top_5_core_vs_far_ratioA)
 np.save(outdir+shortfname[:-3]+'max_core_vs_far_ratioA',max_core_vs_far_ratioA)
 
 np.save(outdir+shortfname[:-3]+'rms_ratioA',rms_ratioA)
