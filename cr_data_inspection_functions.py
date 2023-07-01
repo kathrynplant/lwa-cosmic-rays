@@ -9,7 +9,7 @@ from lwa_antpos import mapping  #TODO: install lwa_antpos on Delphinium
 import math
 from scipy.optimize import curve_fit
 import scipy.stats as st
-import scipy.signal
+from scipy import signal
 
 def printheader(rawpacketdata):
     #parse the header
@@ -162,7 +162,7 @@ def distinguishevents(records,maxoffset):
     return events
 
 
-def mergepolarizations(event,arraymapdictionary,Filter=None):
+def mergepolarizations(event,arraymapdictionary,Filter='None'):
     #this function takes single-polarization dictionaries such as that output by parsefile and merges polarization pairs into a single dictionary for each antenna stand
     #event is a list of records, in the format output by parsefile, that all belong with one event
     #arraymap dictionary 
@@ -198,7 +198,7 @@ def mergepolarizations(event,arraymapdictionary,Filter=None):
         newrecord['antenna_id_A'] =  record['antenna_id'] 
         newrecord['veto_role_A'] = record['veto_role']
         Adata = record['data']
-        if Filter:
+        if Filter!='None':
             Adata=signal.convolve(Adata,Filter,mode='same')
         newrecord['polA_data']=Adata
         newrecord['rmsA']=np.std(Adata[:2000])
@@ -215,7 +215,7 @@ def mergepolarizations(event,arraymapdictionary,Filter=None):
                 newrecord['antenna_id_B'] =  Brecord['antenna_id'] 
                 newrecord['veto_role_B'] = Brecord['veto_role']
                 Bdata = Brecord['data']
-                if Filter:
+                if Filter!='None':
                     Bdata=signal.convolve(Bdata,Filter,mode='same')
                 newrecord['polB_data']=Bdata
                 newrecord['rmsB']=np.std(Bdata[:2000]) #use only the first half to calculate the rms, before the event starts
@@ -254,7 +254,7 @@ def toa_plane(ant_coords,theta,phi):
     time_diff=(sample_rate/c)*dot_product  
     return time_diff
 
-def grad_toa_plane(ant_coords,theta,phi,Filter=None):
+def grad_toa_plane(ant_coords,theta,phi):
     #This is the gradient of toa_plane w.r.t theta and phi
     c=3e8
     sample_rate=1.97e8 #MHz
@@ -266,7 +266,7 @@ def grad_toa_plane(ant_coords,theta,phi,Filter=None):
     dtdphi=(math.pi/180)*(sample_rate/c)*((-y*math.sin(theta_rad)*math.sin(phi_rad)) +(x*math.sin(theta_rad)*math.cos(phi_rad)))
     return np.asarray([dtdtheta,dtdphi]).transpose()
 
-def rank_by_snr(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,Filter=None):
+def rank_by_snr(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,Filter='None'):
     # Return a list of antenna names and snrs in order from strongest snr to smallest , in separate rankings for each polarization and for core and distant antennas
     #Event is a list of records (single-packet dictionaries) belonging to the same event
     #Only antennas with signals (in the first half of the buffer) that satisfy the specified rms and kurtosis cuts are included in the ranking
@@ -327,20 +327,20 @@ def rank_by_snr(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=45,m
 
 ########################## snapshot plotting functions  ##########################################################
 
-def plot_timeseries(event,antenna_names,zoom='peak',Filter=None):
+def plot_timeseries(event,antenna_names,zoom='peak',Filter='None'):
     #Event is a list of records (single-packet dictionaries) belonging to the same event
     #antennas is a list where each element in the list is a tuple of format (s,a) where s is the index of the snap board and a is the index of the antenna to plot
     #If a requested antenna to plot is not in the list (which happens if that packet has been lost), the missing antenna is skipped
     #The requested antennas are plotted in the order they appear in event, not in the order of the input list
     #zoom is either the string 'peak' or a tuple specifying the range of samples to restrict the x axis to
-    #Filter can be None or a 1D numpy array of coefficients for a time-domain FIR. If filter is not none, the timeseries will be convolved with the provided coefficients.
+    #Filter can be None or a 1D numpy array of coefficients for a time-domain FIR. If filter is not 'None', the timeseries will be convolved with the provided coefficients.
     for record in event:
         s=record['board_id']
         a=record['antenna_id']
         antname=mapping.snap2_to_antpol(s,a)
         if antname in antenna_names:
             timeseries=record['data']
-            if Filter:
+            if Filter!='None':
                 timeseries=signal.convolve(timeseries,Filter,mode='same')
             rms=np.std(timeseries[:2000])
             kurtosis=st.kurtosis(timeseries[:2000])
@@ -358,13 +358,13 @@ def plot_timeseries(event,antenna_names,zoom='peak',Filter=None):
             plt.xlabel('time sample')
             plt.ylabel('voltage [ADC units]')
             if zoom=='peak':
-                plt.xlim(np.argmax(timeseries)-50,np.argmax(timeseries)+150)
+                plt.xlim(np.argmax(np.abs(timeseries))-50,np.argmax(np.abs(timeseries))+150)
             else:
                 plt.xlim(zoom[0],zoom[1])
             
     return
 
-def plot_event_peak_to_rms(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,annotate=False,Filter=None,Filter=None):
+def plot_event_peak_to_rms(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,annotate=False,Filter='None'):
     #Plots the peak to rms ratio for each polarization of an event, over the antenna positions of the array
     #Event is a list of records (single-packet dictionaries) belonging to the same event
     #Antennas are filtered to only plot antennas whose signals (in the first half of the buffer) are within the
@@ -468,7 +468,7 @@ def plot_event_peak_to_rms(event,arraymapdictionaries,minimum_ok_rms=25,maximum_
 
     return
 
-def plot_event_toas(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,annotate=False,Filter=None):
+def plot_event_toas(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,annotate=False,Filter='None'):
     #Plots the time of arrival for each antenna and polarization of an event, over the antenna positions of the array
     #time of arrival is in units of clock cycles with respect to the earliest packet timestamp in the event
     #Event is a list of records (single-packet dictionaries) belonging to the same event
