@@ -201,14 +201,14 @@ def mergepolarizations(event,arraymapdictionary,Filter='None'):
         newrecord['veto_role_A'] = record['veto_role']
         Adata = record['data']
         if Filter!='None':
-            Adata=signal.convolve(Adata,Filter,mode='same')
+            Adata=signal.convolve(Adata,Filter,mode='valid')
         newrecord['polA_data']=Adata
         newrecord['rmsA']=np.std(Adata[:2000])
         newrecord['kurtosisA']=st.kurtosis(Adata[:2000])
-        powertimeseriesA=np.square(timeseriesA)
-        smoothedA=signal.convolve(powertimeseriesA,average_window,mode='same')
-        newrecord['meansmoothedA']==np.mean(smoothedA[:2000])
-        index_peak_A=np.argmax(np.abs(peaksmoothedA))
+        powertimeseriesA=np.square(Adata)
+        smoothedA=signal.convolve(powertimeseriesA,average_window,mode='valid')
+        newrecord['meansmoothedA']=np.mean(smoothedA[:2000])
+        index_peak_A=np.argmax(smoothedA)
         newrecord['index_peak_A'] =index_peak_A
         newrecord['peaksmoothedA']=smoothedA[index_peak_A]
         newrecord['powerafterpeakA']=np.mean(smoothedA[index_peak_A+10:index_peak_A+60])
@@ -221,18 +221,17 @@ def mergepolarizations(event,arraymapdictionary,Filter='None'):
                 newrecord['veto_role_B'] = Brecord['veto_role']
                 Bdata = Brecord['data']
                 if Filter!='None':
-                    Bdata=signal.convolve(Bdata,Filter,mode='same')
+                    Bdata=signal.convolve(Bdata,Filter,mode='valid')
                 newrecord['polB_data']=Bdata
                 newrecord['rmsB']=np.std(Bdata[:2000]) #use only the first half to calculate the rms, before the event starts
-                index_peak_B=np.argmax(np.abs(Bdata))
                 newrecord['kurtosisB']=st.kurtosis(Bdata[:2000])
-                powertimeseriesB=np.square(timeseriesB)
-                smoothedB=signal.convolve(powertimeseriesB,average_window,mode='same')
-                record['meansmoothedB']==np.mean(smoothedB[:2000])
-                index_peak_B=np.argmax(np.abs(peaksmoothedB))
+                powertimeseriesB=np.square(Bdata)
+                smoothedB=signal.convolve(powertimeseriesB,average_window,mode='valid')
+                newrecord['meansmoothedB']=np.mean(smoothedB[:2000])
+                index_peak_B=np.argmax(smoothedB)
                 newrecord['index_peak_B'] =index_peak_B
-                record['peaksmoothedB']=np.abs(smoothedB[index_peak_B])       
-                newrecord['powerafterpeakB']=np.mean(smoothedA[index_peak_B+10:index_peak_B+60])
+                newrecord['peaksmoothedB']=np.abs(smoothedB[index_peak_B])       
+                newrecord['powerafterpeakB']=np.mean(smoothedB[index_peak_B+10:index_peak_B+60])
 
         mergedrecords.append(newrecord)
     return mergedrecords
@@ -351,7 +350,7 @@ def plot_timeseries(event,antenna_names,zoom='peak',Filter='None'):
         if antname in antenna_names:
             timeseries=record['data']
             if Filter!='None':
-                timeseries=signal.convolve(timeseries,Filter,mode='same')
+                timeseries=signal.convolve(timeseries,Filter,mode='valid')
             rms=np.std(timeseries[:2000])
             kurtosis=st.kurtosis(timeseries[:2000])
             peak=np.max(np.abs(timeseries))
@@ -370,9 +369,84 @@ def plot_timeseries(event,antenna_names,zoom='peak',Filter='None'):
             if zoom=='peak':
                 plt.xlim(np.argmax(np.abs(timeseries))-50,np.argmax(np.abs(timeseries))+150)
             else:
-                plt.xlim(zoom[0],zoom[1])
+                plt.xlim(zoom[0],zoom[1])            
+    return
+
+def plot_spectra(event,antenna_names,zoom='peak',Filter='None'):
+    #Event is a list of records (single-packet dictionaries) belonging to the same event
+    #Antennas is a list where each element in the list is a tuple of format (s,a) where s is the index of the snap board and a is the index of the antenna to plot
+    #If a requested antenna to plot is not in the list (which happens if that packet has been lost), the missing antenna is skipped
+    #The requested antennas are plotted in the order they appear in event, not in the order of the input list
+    #Filter can be None or a 1D numpy array of coefficients for a time-domain FIR. If filter is not 'None', the timeseries will be convolved with the provided coefficients.
+    for record in event:
+        s=record['board_id']
+        a=record['antenna_id']
+        antname=mapping.snap2_to_antpol(s,a)
+        if antname in antenna_names:
+            timeseries=record['data']
+            if Filter!='None':
+                timeseries=signal.convolve(timeseries,Filter,mode='valid')
+            rms=np.std(timeseries[:2000])
+            kurtosis=st.kurtosis(timeseries[:2000])
+            peak=np.max(np.abs(timeseries))
+            plt.figure(figsize=(20,5))
+            plt.title(antname + ' snap input '+ str(s) +','+ str(a) + ' peak='+str(peak)+' rms='+str(round(rms,3))+' kurtosis='+str(round(kurtosis,3))+' peak/rms='+str(round(peak/rms,3)))
+            spec = np.square(np.abs(np.fft.rfft(timeseries)))
+            f = np.linspace(0, fs/2, len(spec))
+            plt.plot(f, 10*np.log(spec), '.-')
+            plt.xlabel("Frequency [Hz]")
+            plt.ylabel("Relative Power [dB]")
+           
             
     return
+
+def plot_power_timeseries(event,antenna_names,zoom='peak',Filter1='None',Filter2='None'):
+    #Plots the square of the voltage timeseries for the selected antennas, optionally filtered and smoothed
+    #Event is a list of records (single-packet dictionaries) belonging to the same event
+    #Antennas is a list where each element in the list is a tuple of format (s,a) where s is the index of the snap board and a is the index of the antenna to plot
+    #If a requested antenna to plot is not in the list (which happens if that packet has been lost), the missing antenna is skipped
+    #The requested antennas are plotted in the order they appear in event, not in the order of the input list
+    #Filter1 and Filter2 each can be 'None' or a 1D numpy array of coefficients for a time-domain FIR. If filter is not 'None', the timeseries will be convolved with the provided coefficients.
+    #Filter1 is applied to the raw voltage timeseries
+    #Filter2 is a smoothing kernel to apply AFTER squaring the voltage timeseries to obtain a power timeseries
+    for record in event:
+        s=record['board_id']
+        a=record['antenna_id']
+        antname=mapping.snap2_to_antpol(s,a)
+        if antname in antenna_names:
+            timeseries=record['data']
+            
+            rms=np.std(timeseries[:2000])
+            kurtosis=st.kurtosis(timeseries[:2000])
+            peak=np.max(np.abs(timeseries))
+
+            if Filter1!='None':
+                timeseries=signal.convolve(timeseries,Filter1,mode='valid')
+            timeseries=np.square(timeseries)
+            if Filter2!='None':
+                timeseries=signal.convolve(timeseries,Filter2,mode='valid')
+            powerpeak=np.max(timeseries)
+            powermean=np.mean(timeseries)
+
+           
+            plt.figure(figsize=(20,5))
+            plt.suptitle(antname + ' snap input '+ str(s) +','+ str(a) + ' peak='+str(peak)+' rms='+str(round(rms,3))+' kurtosis='+str(round(kurtosis,3))+' peak/rms='+str(round(peak/rms,3))+'power peak'+str(round(powerpeak,3)) +'power mean'+str(round(powerpeak,3)) +'snr'+str(round(powerpeak/powermean,3)))
+            
+            plt.subplot(121)
+            plt.plot(timeseries)
+            plt.xlabel('time sample')
+            plt.ylabel('voltage [ADC units]')
+
+            plt.subplot(122)
+            plt.plot(timeseries)
+            plt.xlabel('time sample')
+            plt.ylabel('voltage [ADC units]')
+            if zoom=='peak':
+                plt.xlim(np.argmax(timeseries)-50,np.argmax(timeseries)+150)
+            else:
+                plt.xlim(zoom[0],zoom[1])
+    return
+
 
 def plot_event_peak_to_rms(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,annotate=False,Filter='None'):
     #Plots the peak to rms ratio for each polarization of an event, over the antenna positions of the array
@@ -616,6 +690,7 @@ def plot_all_timeseries(event):
             if i%8==0:
                 plt.ylabel('voltage [ADC units]')
     return
+
 
 def plot_all_spectra(event):
 
