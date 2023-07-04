@@ -168,6 +168,8 @@ def mergepolarizations(event,arraymapdictionary,Filter='None'):
     #arraymap dictionary 
     #Filter can be None or a 1D numpy array of coefficients for a time-domain FIR. If filter is not none, the timeseries will be convolved with the provided coefficients during the mergepolarizations function.
     xdict,ydict,zdict=arraymapdictionary
+    average_window=(1/4)*np.ones(4)
+
     for record in event:
         record['antname']=mapping.snap2_to_antpol(record['board_id'],record['antenna_id'])
 
@@ -203,10 +205,13 @@ def mergepolarizations(event,arraymapdictionary,Filter='None'):
         newrecord['polA_data']=Adata
         newrecord['rmsA']=np.std(Adata[:2000])
         newrecord['kurtosisA']=st.kurtosis(Adata[:2000])
-        index_peak_A=np.argmax(np.abs(Adata))
+        powertimeseriesA=np.square(timeseriesA)
+        smoothedA=signal.convolve(powertimeseriesA,average_window,mode='same')
+        newrecord['meansmoothedA']==np.mean(smoothedA[:2000])
+        index_peak_A=np.argmax(np.abs(peaksmoothedA))
         newrecord['index_peak_A'] =index_peak_A
-        newrecord['peakA']=np.abs(Adata[index_peak_A]) 
-
+        newrecord['peaksmoothedA']=smoothedA[index_peak_A]
+        newrecord['powerafterpeakA']=np.mean(smoothedA[index_peak_A+10:index_peak_A+60])
         #find the polB data
         for Brecord in polB:
             if Brecord['antname'][:-1]==antname:
@@ -220,9 +225,14 @@ def mergepolarizations(event,arraymapdictionary,Filter='None'):
                 newrecord['polB_data']=Bdata
                 newrecord['rmsB']=np.std(Bdata[:2000]) #use only the first half to calculate the rms, before the event starts
                 index_peak_B=np.argmax(np.abs(Bdata))
-                newrecord['index_peak_B'] =index_peak_B
                 newrecord['kurtosisB']=st.kurtosis(Bdata[:2000])
-                newrecord['peakB']=np.abs(Bdata[index_peak_B])   
+                powertimeseriesB=np.square(timeseriesB)
+                smoothedB=signal.convolve(powertimeseriesB,average_window,mode='same')
+                record['meansmoothedB']==np.mean(smoothedB[:2000])
+                index_peak_B=np.argmax(np.abs(peaksmoothedB))
+                newrecord['index_peak_B'] =index_peak_B
+                record['peaksmoothedB']=np.abs(smoothedB[index_peak_B])       
+                newrecord['powerafterpeakB']=np.mean(smoothedA[index_peak_B+10:index_peak_B+60])
 
         mergedrecords.append(newrecord)
     return mergedrecords
