@@ -378,6 +378,7 @@ def plot_spectra(event,antenna_names,zoom='peak',Filter='None'):
     #If a requested antenna to plot is not in the list (which happens if that packet has been lost), the missing antenna is skipped
     #The requested antennas are plotted in the order they appear in event, not in the order of the input list
     #Filter can be None or a 1D numpy array of coefficients for a time-domain FIR. If filter is not 'None', the timeseries will be convolved with the provided coefficients.
+    fs=196.30822126189432
     for record in event:
         s=record['board_id']
         a=record['antenna_id']
