@@ -9,48 +9,59 @@ from scipy.optimize import curve_fit
 import scipy.stats as st
 import math
 import argparse
+import yaml
 
 
 parser=argparse.ArgumentParser(description='Parse raw cosmic ray trigger data files and make preliminary RFI rejection cuts.')
-parser.add_argument('fname', type=str, help='File name of raw data file')
+parser.add_argument('fname', type=str, help='File name of raw data file, not including file path (which is specified in config file)')
+parser.add_argument('config',type=str, help='Full path to configuration file')
 args=parser.parse_args()
 fname = args.fname
+config = args.config
 
-#### set parameters -- eventually this could be read from a config file ######################################
 
+############################### set parameters -- read from a config file ######################################
+with open(config, 'r') as file:
+    configuration=yaml.safe_load(file)
 #where to save data products
-outdir='/data1/cosmic-ray-data/2023July1-data-products/'
-datadir ='/data1/cosmic-ray-data/2023July1/'
-#if fname[:6]=='/data0':
-#    outdir='/data0/cosmic-ray-data/2023July-data-products/'
-#    datadir ='/data0/cosmic-ray-data/2023Ju/' #path to fname
-#
-#elif fname[:6]=='/data1':
-#    outdir='/data0/cosmic-ray-data/2023June20-data-products/'
-#    datadir ='/data0/cosmic-ray-data/2023June20/' #path to fname
-
-
-
+outdir=configuration['outdir']
+datadir =configuration['datadir'] 
 shortfname=fname[len(datadir):]
+stop_index=configuration['stop_index']
+                       
 #name of csv file with antenna names and coordinates: Columns must have headings 'antname', 'x', 'y', 'elevation'
-array_map_filename='/home/ubuntu/kp/lwa-cosmic-rays/array-map-5-22-2023.csv'
+array_map_filename=configuration['array_map_filename'] 
+
+#FIR Filter coefficients
+h=np.asarray(configuration['filter'])
+
 #parameters for antenna-based cuts
-maximum_ok_power=50
-minimum_ok_power=25
-minsnr=5 
-minimum_ok_kurtosis=-1
-maximum_ok_kurtosis=1
+maximum_ok_power=configuration['maximum_ok_power'] 
+minimum_ok_power=configuration['minimum_ok_power']
+minsnr=configuration['minsnr']
+minimum_ok_kurtosis=configuration['minimum_ok_kurtosis']
+maximum_ok_kurtosis=configuration['maximum_ok_kurtosis']
 
 #parameters for event-based cuts
-minmaxstrengthratio=2.5 #core vs distant ratio
-mintop5ratio=2.5 #core vs distant ratio
-minstrongdetections2=50 #replicate Ryan's cut for strong detections
-min_power_ratio=0.5 #cut for ratio of power before and after event
-max_power_ratio=1.7 #cut for ratio of power before and after event
+minmaxstrengthratio=configuration['minmaxstrengthratio']#core vs distant ratio
+mintop5ratio=configuration['mintop5ratio']#core vs distant ratio
+minstrongdetections2=configuration['minstrongdetections']#Setting this equal to 50 replicates Ryan's cut for strong detections
+min_power_ratio=configuration['min_power_ratio']#cut for ratio of power before and after event
+max_power_ratio=configuration['max_power_ratio']#cut for ratio of power before and after event
 
+#inject simulated events? True or False
+simulate=configuration['simulation']
+                       
 ####################################### load data ###########################################################
-records = parsefile(fname) 
+records = parsefile(fname,end_ind=stop_index) 
 
+if simulate:
+    pulse=configuration['pulse']
+    veto_thresh=configuration['veto_thresh']
+    ok_vetos_fname=configuration['ok_vetos_fname']
+    pulse_antennas=configuration['pulse_antennas']
+    records=inject_simulation(records,pulse_antennas,pulse,ok_vetos_fname,veto_thresh)
+                       
 ###################### Organize list of single-antenna records into list of events ############################################
 events=distinguishevents(records,200)
 complete_events=[event for event in events if len(event)==704]
@@ -95,7 +106,7 @@ sum_top_10_core_vs_far_ratioB=np.zeros(len(complete_events))
 #go through each event
 for i,event_indices in enumerate(complete_events):  
     event=[records[i] for i in event_indices]
-    mergedrecords=mergepolarizations(event,arraymapdictionaries)
+    mergedrecords=mergepolarizations(event,arraymapdictionaries,Filter=h)
 
     xcoords=np.asarray([record['x'] for record in mergedrecords])
     ycoords=np.asarray([record['y'] for record in mergedrecords])

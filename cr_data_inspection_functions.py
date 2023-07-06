@@ -236,9 +236,34 @@ def mergepolarizations(event,arraymapdictionary,Filter='None'):
         mergedrecords.append(newrecord)
     return mergedrecords
 
+def inject_simulation(records,pulse_antennas,pulse,ok_vetos_fname,veto_thresh):
+    #Simulate an event by adding a delta function pulse to the timeseries for certain antennas
+    #This is designed to add pulses to data from untriggered snapshots, as a quick test of selection cuts 
+    #records is a list of single-antenna records such as that output by parsefile
+    #pulse_antennas is the list of antenna names (specifying which polarization) to add the pulse to
+    #pulse is the pulse height
+    #ok_vetos_fname is the file name of a numpy file with an array indicating which signals are veto antennas (same format as used by the code to run the detector)
+    #veto_thresh is the desired veto threshold to use
+    #returns a list of records that have the pulses added to them
+    ok_vetos=np.load(ok_vetos_fname)
+    for r in records:
+        snap=r['board_id']
+        snapinput=r['antenna_id']
+        antname=mapping.snap2_to_antpol(snap,snapinput)
+        if ok_vetos[snap-1,snapinput]:
+            r['veto_role']=1
+            r['veto_power_threshold']=[veto_thresh]
+        if antname in pulse_antennas:
+            data=r['data']
+            sample=data[2500]
+            if np.abs(sample+pulse)<512:
+                data[2500]=sample+pulse
+            else:
+                data[2500]=512
+    return records
+
+
 ### Arrival direction fitting
-
-
 def toa_plane(ant_coords,theta,phi):
     #This calculates the arrival times at each antenna of a plane wave moving across the array
     #The TOAs are returned in number of clock cycles relative to the arrival time at the zero,zero,zero coordinate

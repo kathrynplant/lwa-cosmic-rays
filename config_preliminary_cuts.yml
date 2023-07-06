@@ -1,0 +1,64 @@
+#Configuration file to list parameters for preliminary_cuts.py to read.
+######## File path parameters ##################
+#path to directory with data files. Note that the input data file is still a command line argument, for ease of use with gnu parallel.
+datadir: '/home/ubuntu/kp/data/2023July3-overnight-software-trigger/'
+#Directory to save data products
+outdir: '/home/ubuntu/kp/data/2023July3-overnight-software-trigger/'
+#index in input file at which to stop loading data (this is useful if test-running the cuts on a small amount of data)
+stop_index: 705
+
+######## Parameters for antenna-based cuts ######
+#name of csv file with antenna names and coordinates: Columns must have headings 'antname', 'x', 'y', 'elevation'
+array_map_filename: '/home/ubuntu/kp/lwa-cosmic-rays/array-map-5-22-2023.csv'
+
+#Coefficients of FIR filter to apply to voltage timeseries before computing power. This should match what's applied in firmware (unless the purpose is to test alternate filters)
+
+filter: [0.000049291111379545783611425685544205066,
+    0.012255497574972781804625299173494568095,
+    0.085289616177628382875930412865272955969,
+    -0.063136263203890236050952466939634177834,
+    -0.021489412960359111082198069198057055473,
+    -0.067555957743183181474222465112688951194,
+    -0.017706118779731286339007567676162580028,
+    0.080882151494431037130894424080906901509,
+    -0.014358148251631907416081546102759602945,
+    0.093835202832724035060252276707615237683,
+    -0.280577771800571862392814637132687494159,
+    -0.129748808680352711864003367736586369574,
+    0.501393724111570460166831253445707261562,
+    -0.129748808680352711864003367736586369574,
+    -0.280577771800571862392814637132687494159,
+    0.093835202832724035060252276707615237683,
+    -0.014358148251631907416081546102759602945,
+    0.080882151494431037130894424080906901509,
+    -0.017706118779731286339007567676162580028,
+    -0.067555957743183181474222465112688951194,
+    -0.021489412960359111082198069198057055473,
+    -0.063136263203890236050952466939634177834,
+    0.085289616177628382875930412865272955969,
+    0.012255497574972781804625299173494568095,
+    0.000049291111379545783611425685544205066]
+maximum_ok_power: 50
+minimum_ok_power: 25
+#minimum signal to noise ratio, calculated as ratio of peak to mean of smoothed power timeseries from filtered voltages 
+minsnr: 5 
+#minimum acceptable excess kurtosis
+minimum_ok_kurtosis: -1
+#maximum acceptable excess kurtosis
+maximum_ok_kurtosis: 1
+######## Parameters for event-based cuts ###### 
+#core vs distant ratio
+minmaxstrengthratio: 2.5
+#core vs distant ratio
+mintop5ratio: 2.5 
+#replicate Ryan's cut for strong detections
+minstrongdetections: 50 
+#cut for ratio of power before and after event
+min_power_ratio: 0.5 
+max_power_ratio: 1.7 
+######## Options to inject simulated pulses to test the cuts ####
+simulation: True
+pulse: 500
+pulse_antennas: ['LWA-081B', 'LWA-082B', 'LWA-109B', 'LWA-111B', 'LWA-116B', 'LWA-120B', 'LWA-122B', 'LWA-149B', 'LWA-151B', 'LWA-153B']
+veto_thresh: 90000 
+ok_vetos_fname: '/home/ubuntu/kp/ok_vetos-2023-7-4.npy'
