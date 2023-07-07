@@ -289,7 +289,7 @@ n_selected2=len(select_events2)
 
 ###############Save info on cuts################################
 
-print(shortfname, total, complete_events_count, incomplete_events_count, scrambled_complete_events,power_change_cut.sum(),veto_cut.sum(),max_distant_vs_core_cut.sum(),top5_distant_vs_core_cut.sum(),distant_vs_core_cut2.sum(), n_selected1,n_selected2 )
+print(shortfname, config, total, complete_events_count, incomplete_events_count, scrambled_complete_events,power_change_cut.sum(),veto_cut.sum(),max_distant_vs_core_cut.sum(),top5_distant_vs_core_cut.sum(),distant_vs_core_cut2.sum(), n_selected1,n_selected2 )
 
 
 np.save(outdir+shortfname[:-3]+'records_per_event',np.asarray([len(e) for e in events]))

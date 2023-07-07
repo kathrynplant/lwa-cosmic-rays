@@ -3,9 +3,9 @@
 #path to directory with data files. Note that the input data file is still a command line argument, for ease of use with gnu parallel.
 datadir: '/home/ubuntu/kp/data/2023July3-overnight-software-trigger/'
 #Directory to save data products
-outdir: '/home/ubuntu/kp/data/2023July3-overnight-software-trigger/'
+outdir: '/home/ubuntu/kp/data/2023July3-overnight-software-trigger/simulate-pulse-500'
 #index in input file at which to stop loading data (this is useful if test-running the cuts on a small amount of data)
-stop_index: 705
+stop_index: 7040000
 
 ######## Parameters for antenna-based cuts ######
 #name of csv file with antenna names and coordinates: Columns must have headings 'antname', 'x', 'y', 'elevation'
@@ -57,8 +57,9 @@ minstrongdetections: 50
 min_power_ratio: 0.5 
 max_power_ratio: 1.7 
 ######## Options to inject simulated pulses to test the cuts ####
-simulation: True
-pulse: 500
-pulse_antennas: ['LWA-081B', 'LWA-082B', 'LWA-109B', 'LWA-111B', 'LWA-116B', 'LWA-120B', 'LWA-122B', 'LWA-149B', 'LWA-151B', 'LWA-153B']
-veto_thresh: 90000 
-ok_vetos_fname: '/home/ubuntu/kp/ok_vetos-2023-7-4.npy'
+#If setting simulation=True, then uncomment the other options
+simulation: False
+#pulse: 0
+#pulse_antennas: 
+#veto_thresh: 90000 
+#ok_vetos_fname: '/home/ubuntu/kp/ok_vetos-2023-7-4.npy'
