@@ -1,9 +1,9 @@
 #Configuration file to list parameters for preliminary_cuts.py to read.
 ######## File path parameters ##################
 #path to directory with data files. Note that the input data file is still a command line argument, for ease of use with gnu parallel.
-datadir: '/home/ubuntu/kp/data/2023July3-overnight-software-trigger/'
+datadir: '/data0/cosmic-ray-data/2023July4-data-products/'
 #Directory to save data products
-outdir: '/home/ubuntu/kp/data/2023July3-overnight-software-trigger/simulate-pulse-500'
+outdir: '/data0/cosmic-ray-data/2023July4/'
 #index in input file at which to stop loading data (this is useful if test-running the cuts on a small amount of data)
 stop_index: 7040000
 
@@ -39,7 +39,7 @@ filter: [0.000049291111379545783611425685544205066,
     0.012255497574972781804625299173494568095,
     0.000049291111379545783611425685544205066]
 maximum_ok_power: 50
-minimum_ok_power: 25
+minimum_ok_power: 15
 #minimum signal to noise ratio, calculated as ratio of peak to mean of smoothed power timeseries from filtered voltages 
 minsnr: 5 
 #minimum acceptable excess kurtosis
