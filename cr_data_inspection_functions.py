@@ -515,12 +515,13 @@ def plot_event_snr(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=4
     
     select_core_antennas=(xcoords**2)+(ycoords**2)<(115**2)
     select_far_antennas=(xcoords**2)+(ycoords**2)>(115**2)  #note the core vs far cuts used in plotting are different than what's used for estimating if event is concentrated on core
-
+    
+    sizescale=5
     plt.figure(figsize=(15,15))
     plt.suptitle('Signal to noise ratio, good antennas only')
     plt.subplot(221)
     plt.title("Polarization A ")
-    plt.scatter(xcoords[cutA],ycoords[cutA],c=snrA[cutA])
+    plt.scatter(xcoords[cutA],ycoords[cutA],c=snrA[cutA],s=sizescale*(snrA[cutA]))
     plt.colorbar()
     plt.ylabel('North-South position [m]')
     if annotate:
@@ -533,7 +534,7 @@ def plot_event_snr(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=4
     
     plt.subplot(222)
     plt.title("Polarization A --zoom in")
-    plt.scatter(xcoords[cutA],ycoords[cutA],c=snrA[cutA])
+    plt.scatter(xcoords[cutA],ycoords[cutA],c=snrA[cutA],s=sizescale*(snrA[cutA]))
     plt.xlim(-105,105)
     plt.ylim(-105,105)
     plt.colorbar(label='peak/rms')
@@ -548,7 +549,7 @@ def plot_event_snr(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=4
                 
     plt.subplot(223)
     plt.title("Polarization B ")
-    plt.scatter(xcoords[cutB],ycoords[cutB],c=snrB[cutB])
+    plt.scatter(xcoords[cutB],ycoords[cutB],c=snrB[cutB],s=sizescale*(snrB[cutB]))
     plt.colorbar()
     plt.xlabel('East-West position [m]')
     plt.ylabel('North-South position [m]')
@@ -562,7 +563,7 @@ def plot_event_snr(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=4
 
     plt.subplot(224)
     plt.title("Polarization B -- zoom in")
-    plt.scatter(xcoords[cutB],ycoords[cutB],c=snrB[cutB])
+    plt.scatter(xcoords[cutB],ycoords[cutB],c=snrB[cutB],s=sizescale*(snrB[cutB]))
     plt.xlim(-105,105)
     plt.ylim(-105,105)
     plt.colorbar(label='peak/rms')
@@ -702,6 +703,12 @@ def plot_event_toas(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=
     rmsA=np.asarray([(record['meansmoothedA'])**0.5 for record in mergedrecords])
     rmsB=np.asarray([(record['meansmoothedB'])**0.5 for record in mergedrecords])
 
+    peakA=np.asarray([record['peaksmoothedA'] for record in mergedrecords])
+    peakB=np.asarray([record['peaksmoothedB'] for record in mergedrecords])
+
+    snrA=peakA/(rmsA**2)
+    snrB=peakB/(rmsB**2)
+    
     #get time of peak
     index_peak_A=np.asarray([record['index_peak_A'] for record in mergedrecords])
     index_peak_B=np.asarray([record['index_peak_B'] for record in mergedrecords])
@@ -732,12 +739,12 @@ def plot_event_toas(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=
     select_core_antennas=(xcoords**2)+(ycoords**2)<(115**2)
     select_far_antennas=(xcoords**2)+(ycoords**2)>(115**2)  #note the core vs far cuts used in plotting are different than what's used for estimating if event is concentrated on core
     
-
+    sizescale=5
     plt.figure(figsize=(15,15))
     plt.suptitle('Time of Peak, good antennas only')
     plt.subplot(221)
     plt.title("Polarization A ")
-    plt.scatter(xcoords[cutA],ycoords[cutA],c=t_rel_A[cutA])
+    plt.scatter(xcoords[cutA],ycoords[cutA],c=t_rel_A[cutA],s=sizescale*(snrA[cutA]))
     plt.colorbar()
     plt.clim(np.median(t_rel_B[cutB])-700,np.median(t_rel_B[cutB])+700)
     plt.ylabel('North-South position [m]')
@@ -751,7 +758,7 @@ def plot_event_toas(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=
     
     plt.subplot(222)
     plt.title("Polarization A --zoom in")
-    plt.scatter(xcoords[cutA],ycoords[cutA],c=t_rel_A[cutA])
+    plt.scatter(xcoords[cutA],ycoords[cutA],c=t_rel_A[cutA],s=sizescale*(snrA[cutA]))
     plt.xlim(-105,105)
     plt.ylim(-105,105)
     plt.colorbar(label='time sample')
@@ -766,7 +773,7 @@ def plot_event_toas(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=
                 
     plt.subplot(223)
     plt.title("Polarization B ")
-    plt.scatter(xcoords[cutB],ycoords[cutB],c=t_rel_B[cutB])
+    plt.scatter(xcoords[cutB],ycoords[cutB],c=t_rel_B[cutB],s=sizescale*(snrB[cutB]))
     plt.colorbar()
     plt.clim(np.median(t_rel_B[cutB])-700,np.median(t_rel_B[cutB])+700)
 
@@ -782,7 +789,7 @@ def plot_event_toas(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=
 
     plt.subplot(224)
     plt.title("Polarization B -- zoom in")
-    plt.scatter(xcoords[cutB],ycoords[cutB],c=t_rel_B[cutB])
+    plt.scatter(xcoords[cutB],ycoords[cutB],c=t_rel_B[cutB],s=sizescale*(snrB[cutB]))
     plt.xlim(-105,105)
     plt.ylim(-105,105)
     plt.colorbar(label='time sample')
@@ -797,8 +804,6 @@ def plot_event_toas(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=
                 y=ycoords[i]
                 plt.text(x,y,txt[3:],fontsize='x-small')
     return
-
-
 
 def plot_all_timeseries(event):
     for b in range(11):
