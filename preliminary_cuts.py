@@ -16,8 +16,9 @@ parser=argparse.ArgumentParser(description='Parse raw cosmic ray trigger data fi
 parser.add_argument('fname', type=str, help='File name of raw data file, not including file path (which is specified in config file)')
 parser.add_argument('config',type=str, help='Full path to configuration file')
 args=parser.parse_args()
-fname = args.fname
+fname = args.fname 
 config = args.config
+
 
 
 ############################### set parameters -- read from a config file ######################################
@@ -28,7 +29,6 @@ outdir=configuration['outdir']
 datadir =configuration['datadir'] 
 shortfname=fname[len(datadir):]
 stop_index=configuration['stop_index']
-                       
 #name of csv file with antenna names and coordinates: Columns must have headings 'antname', 'x', 'y', 'elevation'
 array_map_filename=configuration['array_map_filename'] 
 
