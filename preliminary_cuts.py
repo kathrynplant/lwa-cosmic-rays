@@ -16,16 +16,9 @@ parser=argparse.ArgumentParser(description='Parse raw cosmic ray trigger data fi
 parser.add_argument('fname', type=str, help='File name of raw data file, not including file path (which is specified in config file)')
 #TODO bring back this command line option parser.add_argument('config',type=str, help='Full path to configuration file')
 args=parser.parse_args()
-<<<<<<< HEAD
-fname = args.fname 
-config = args.config
-
-=======
 fname = args.fname
 #TODO bring back this option config = args.config
 config='/home/ubuntu/kp/lwa-cosmic-rays/config_preliminary_cuts.yml'
->>>>>>> abd95875fa0fd9d67307f26851a5034a9fb0bf3e
-
 
 ############################### set parameters -- read from a config file ######################################
 with open(config, 'r') as file:
