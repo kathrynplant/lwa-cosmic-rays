@@ -269,7 +269,7 @@ Apol_max_distant_v_core=np.logical_and((max_core_vs_far_ratioA>minmaxstrengthrat
 Bpol_max_distant_v_core=np.logical_and((max_core_vs_far_ratioB>minmaxstrengthratio),Bpolarized)
 max_distant_vs_core_cut=np.logical_or(Apol_max_distant_v_core,Bpol_max_distant_v_core)
 
-Apol_top5_distant_v_core=np.logical_and(sum_top_5_core_vs_far_ratioA>mintop5ratio,Bpolarized)
+Apol_top5_distant_v_core=np.logical_and(sum_top_5_core_vs_far_ratioA>mintop5ratio,Apolarized)
 Bpol_top5_distant_v_core=np.logical_and(sum_top_5_core_vs_far_ratioB>mintop5ratio,Bpolarized)
 
 top5_distant_vs_core_cut=np.logical_or(Apol_top5_distant_v_core,Bpol_top5_distant_v_core)
