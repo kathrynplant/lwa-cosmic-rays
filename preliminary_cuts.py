@@ -14,10 +14,11 @@ import yaml
 
 parser=argparse.ArgumentParser(description='Parse raw cosmic ray trigger data files and make preliminary RFI rejection cuts.')
 parser.add_argument('fname', type=str, help='File name of raw data file, not including file path (which is specified in config file)')
-#TODO bring back this command line option parser.add_argument('config',type=str, help='Full path to configuration file')
+parser.add_argument('config',type=str, help='Full path to configuration file')
 args=parser.parse_args()
 fname = args.fname
-#TODO bring back this option config = args.config
+
+config = args.config
 config='/home/ubuntu/kp/lwa-cosmic-rays/config_preliminary_cuts.yml'
 
 ############################### set parameters -- read from a config file ######################################
