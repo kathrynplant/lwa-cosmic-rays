@@ -452,7 +452,7 @@ def plot_power_timeseries(event,antenna_names,zoom='peak',Filter1='None',Filter2
             if Filter2!='None':
                 timeseries=signal.convolve(timeseries,Filter2,mode='valid')
             powerpeak=np.max(timeseries)
-            powermean=np.mean(timeseries)
+            powermean=np.mean(timeseries[:2000])
 
            
             plt.figure(figsize=(20,5))
