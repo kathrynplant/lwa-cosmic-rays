@@ -19,7 +19,7 @@ args=parser.parse_args()
 fname = args.fname
 
 config = args.config
-config='/home/ubuntu/kp/lwa-cosmic-rays/config_preliminary_cuts.yml'
+#config='/home/ubuntu/kp/lwa-cosmic-rays/config_preliminary_cuts.yml'
 
 ############################### set parameters -- read from a config file ######################################
 with open(config, 'r') as file:
