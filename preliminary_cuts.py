@@ -13,8 +13,8 @@ import yaml
 
 
 parser=argparse.ArgumentParser(description='Parse raw cosmic ray trigger data files and make preliminary RFI rejection cuts.')
-parser.add_argument('fname', type=str, help='File name of raw data file, not including file path (which is specified in config file)')
 parser.add_argument('config',type=str, help='Full path to configuration file')
+parser.add_argument('fname', type=str, help='File name of raw data file, not including file path (which is specified in config file)')
 args=parser.parse_args()
 fname = args.fname 
 config = args.config
