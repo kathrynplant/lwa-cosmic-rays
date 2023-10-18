@@ -126,17 +126,14 @@ def packet_ant_id_2_snap_input(i):
     return (i&0b111000)+((i+1)&0b000111)
 
 def distinguishevents(records,maxoffset):
-    #This function turns a list of single-antenna records, into a list of events.
+    #This function turns a list of single-antenna records into a list of events.
     #records is a list of single-antenna records, such as that returned by parsefile.
     #maxoffset is the maximum timestamp difference (in number of clockcycles) for two records to be considered part of the same event.
     #The function distinguish events returns a list of events, where each event is a list of indices of the records (single-antenna dictionaries) that belong to that event.
 
     #start an empty list which will ultimately have one element per event
     events=[]
-    #eventcount=1  #keep track of how many separate events there are
 
-    #start an list for the first event. The first record is the first element of the first event
-    #currentevent_records=[]
     currentevent_indices=[]
 
     currenteventtimestamp=records[0]['timestamp']
