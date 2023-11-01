@@ -5,11 +5,27 @@ import time
 import numpy as np
 import struct
 import matplotlib.pyplot as plt
-from lwa_antpos import mapping  #TODO: install lwa_antpos on Delphinium
+#from lwa_antpos import mapping  #TODO: install lwa_antpos on Delphinium
 import math
 from scipy.optimize import curve_fit
 import scipy.stats as st
 from scipy import signal
+
+
+def lookup_antname(lwa_df,snap,inp):
+    #Returns the antenna name string given an array configuration dataframe, a snap board number, and an input number.
+    #adapted from lwa_antpos.mapping.snap2_to_antpol
+    #lwa_df is the pandas dataframe object describing the array configuration, as obtained from lwa_antpos.reading.read_antpos_etcd()
+    #snap is the snap board number, from [1,11]
+    #inp is the input index, from [0,63]
+    sel=np.where((lwa_df['snap2_location']==snap)&((lwa_df['pola_fpga_num']==inp)|(lwa_df['polb_fpga_num']==inp)))
+    if len(sel[0]) != 1:
+        print('Did not find exactly one antpol.')
+        return
+    elif lwa_df.iloc[sel]['pola_fpga_num'][0]==inp:
+        return lwa_df.iloc[sel].index.to_list()[0] + 'A'
+    else:
+        return lwa_df.iloc[sel].index.to_list()[0] + 'B'
 
 def printheader(rawpacketdata):
     #parse the header
@@ -159,16 +175,16 @@ def distinguishevents(records,maxoffset):
     return events
 
 
-def mergepolarizations(event,arraymapdictionary,Filter='None'):
+def mergepolarizations(event,arraymapdictionary,lwa_df,Filter='None'):
     #this function takes single-polarization dictionaries such as that output by parsefile and merges polarization pairs into a single dictionary for each antenna stand
     #event is a list of records, in the format output by parsefile, that all belong with one event
-    #arraymap dictionary 
+    #arraymap dictionary and lwa_df contain configuration information
     #Filter can be None or a 1D numpy array of coefficients for a time-domain FIR. If filter is not none, the timeseries will be convolved with the provided coefficients during the mergepolarizations function.
     xdict,ydict,zdict=arraymapdictionary
     average_window=(1/4)*np.ones(4)
 
     for record in event:
-        record['antname']=mapping.snap2_to_antpol(record['board_id'],record['antenna_id'])
+        record['antname']=lookup_antname.snap2_to_antpol(lwa_df,record['board_id'],record['antenna_id'])
 
     merging=[record for record in event if record['antname'][-1]=='A']
     polB=[record for record in event if record['antname'][-1]=='B']
@@ -233,7 +249,7 @@ def mergepolarizations(event,arraymapdictionary,Filter='None'):
         mergedrecords.append(newrecord)
     return mergedrecords
 
-def inject_simulation(records,pulse_antennas,pulse,ok_vetos_fname,veto_thresh):
+def inject_simulation(records,pulse_antennas,pulse,ok_vetos_fname,veto_thresh,lwa_df):
     #Simulate an event by adding a delta function pulse to the timeseries for certain antennas
     #This is designed to add pulses to data from untriggered snapshots, as a quick test of selection cuts 
     #records is a list of single-antenna records such as that output by parsefile
@@ -242,11 +258,12 @@ def inject_simulation(records,pulse_antennas,pulse,ok_vetos_fname,veto_thresh):
     #ok_vetos_fname is the file name of a numpy file with an array indicating which signals are veto antennas (same format as used by the code to run the detector)
     #veto_thresh is the desired veto threshold to use
     #returns a list of records that have the pulses added to them
+    #lwa_df is the array configuration spreadsheet read in by mapping
     ok_vetos=np.load(ok_vetos_fname)
     for r in records:
         snap=r['board_id']
         snapinput=r['antenna_id']
-        antname=mapping.snap2_to_antpol(snap,snapinput)
+        antname=lookup_antname(lwa_df,snap,snapinput)
         if ok_vetos[snap-1,snapinput]:
             r['veto_role']=1
             r['veto_power_threshold']=[veto_thresh]

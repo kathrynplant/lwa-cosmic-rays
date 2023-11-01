@@ -4,7 +4,7 @@ import numpy as np
 import struct
 import matplotlib.pyplot as plt
 from cr_data_inspection_functions import *
-from lwa_antpos import mapping
+from lwa_antpos import reading
 from scipy.optimize import curve_fit
 import scipy.stats as st
 import math
@@ -19,6 +19,8 @@ args=parser.parse_args()
 fname = args.fname 
 config = args.config
 
+starttime=time.time()
+print('Start time ',starttime)
 ############################### set parameters -- read from a config file ######################################
 with open(config, 'r') as file:
     configuration=yaml.safe_load(file)
@@ -58,7 +60,7 @@ if simulate:
     veto_thresh=configuration['veto_thresh']
     ok_vetos_fname=configuration['ok_vetos_fname']
     pulse_antennas=configuration['pulse_antennas']
-    records=inject_simulation(records,pulse_antennas,pulse,ok_vetos_fname,veto_thresh)
+    records=inject_simulation(records,pulse_antennas,pulse,ok_vetos_fname,veto_thresh,lwa_df)
                        
 ###################### Organize list of single-antenna records into list of events ############################################
 events=distinguishevents(records,200)
@@ -85,6 +87,8 @@ for i,n in enumerate(array_map['antname']):
     zdict[n]=array_map['elevation'][i]
 arraymapdictionaries=[xdict,ydict,zdict]
 
+lwa_df = reading.read_antpos_etcd()
+
 ##########Calculate Summary info ####################
 
 #parameters for antenna-based cuts
@@ -94,7 +98,6 @@ minsnr=5
 minimum_ok_kurtosis=-1
 maximum_ok_kurtosis=1
 
-print('Start time ',time.time())
 
 #arrays to store summary info for each event
 power_ratioA=np.zeros(len(complete_events))
@@ -122,7 +125,7 @@ minmeanpowerafterB=np.zeros(len(complete_events))
 #go through each event
 for i,event_indices in enumerate(complete_events):  
     event=[records[i] for i in event_indices]
-    mergedrecords=mergepolarizations(event,arraymapdictionaries,Filter=h)
+    mergedrecords=mergepolarizations(event,arraymapdictionaries,lwa_df,Filter=h)
 
     xcoords=np.asarray([record['x'] for record in mergedrecords])
     ycoords=np.asarray([record['y'] for record in mergedrecords])
@@ -315,3 +318,7 @@ for e in select_events2:
     if (e==[n for n in range(np.min(e),np.min(e)+704)]):
         indices_to_save.append(e[0])
 np.save(outdir+shortfname[:-3]+'indices_cuts2',np.asarray(indices_to_save))
+
+
+endtime=time.time()
+print('Duration: ', endtime-starttime)

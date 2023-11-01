@@ -1,11 +1,11 @@
 #Configuration file to list parameters for preliminary_cuts.py to read.
 ######## File path parameters ##################
 #path to directory with data files. Note that the input data file is still a command line argument, for ease of use with gnu parallel.
-datadir: '/data0/cosmic-ray-data/2023July4-data-products/'
+datadir: '/data0/cosmic-ray-data/2023August9/'
 #Directory to save data products
-outdir: '/data0/cosmic-ray-data/2023July4/'
+outdir: '/data0/cosmic-ray-data/code-testing/'
 #index in input file at which to stop loading data (this is useful if test-running the cuts on a small amount of data)
-stop_index: 7040000
+stop_index: 70400 #7040000 is the whole file
 
 ######## Parameters for antenna-based cuts ######
 #name of csv file with antenna names and coordinates: Columns must have headings 'antname', 'x', 'y', 'elevation'
