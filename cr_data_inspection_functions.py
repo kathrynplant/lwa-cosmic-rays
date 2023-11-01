@@ -314,13 +314,13 @@ def grad_toa_plane(ant_coords,theta,phi):
     dtdphi=(math.pi/180)*(sample_rate/c)*((-y*math.sin(theta_rad)*math.sin(phi_rad)) +(x*math.sin(theta_rad)*math.cos(phi_rad)))
     return np.asarray([dtdtheta,dtdphi]).transpose()
 
-def rank_by_snr(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,Filter='None'):
+def rank_by_snr(event,arraymapdictionaries,lwa_df,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,Filter='None'):
     # Return a list of antenna names and snrs in order from strongest snr to smallest , in separate rankings for each polarization and for core and distant antennas
     #Event is a list of records (single-packet dictionaries) belonging to the same event
     #Only antennas with signals (in the first half of the buffer) that satisfy the specified rms and kurtosis cuts are included in the ranking
         #Filter can be None or a 1D numpy array of coefficients for a time-domain FIR. If filter is not none, the timeseries will be convolved with the provided coefficients during the mergepolarizations function.
     
-    mergedrecords=mergepolarizations(event,arraymapdictionaries,Filter)
+    mergedrecords=mergepolarizations(event,arraymapdictionaries,lwa_df,Filter)
 
     xcoords=np.asarray([record['x'] for record in mergedrecords])
     ycoords=np.asarray([record['y'] for record in mergedrecords])
@@ -487,7 +487,7 @@ def plot_power_timeseries(event,antenna_names,zoom='peak',Filter1='None',Filter2
                 plt.xlim(zoom[0],zoom[1])
     return
 
-def plot_event_snr(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,annotate=False,Filter='None'):
+def plot_event_snr(event,arraymapdictionaries,lwa_df,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,annotate=False,Filter='None'):
     #cmin=0
     #cmax=35
     #Plots the snr for each polarization of an event, over the antenna positions of the array
@@ -497,7 +497,7 @@ def plot_event_snr(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=4
     #bounds set by minimum_ok_rms, maximum_ok_rms, minimum_ok_kurtosis, maximum_ok_kurtosis
     #Antennas are labelled if annotate=True
     #Filter can be None or a 1D numpy array of coefficients for a time-domain FIR. If filter is not none, the timeseries will be convolved with the provided coefficients during the mergepolarizations function.
-    mergedrecords=mergepolarizations(event,arraymapdictionaries,Filter)
+    mergedrecords=mergepolarizations(event,arraymapdictionaries,lwa_df,Filter)
 
     xcoords=np.asarray([record['x'] for record in mergedrecords])
     ycoords=np.asarray([record['y'] for record in mergedrecords])
@@ -601,7 +601,7 @@ def plot_event_snr(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=4
 
     return
 
-def plot_event_total_power_snr(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,annotate=False,Filter='None'):
+def plot_event_total_power_snr(event,arraymapdictionaries,lwa_df,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,annotate=False,Filter='None'):
     #cmin=0
     #cmax=35
     #Plots the snr over the antenna positions of the array
@@ -611,7 +611,7 @@ def plot_event_total_power_snr(event,arraymapdictionaries,minimum_ok_rms=25,maxi
     #bounds set by minimum_ok_rms, maximum_ok_rms, minimum_ok_kurtosis, maximum_ok_kurtosis
     #Antennas are labelled if annotate=True
     #Filter can be None or a 1D numpy array of coefficients for a time-domain FIR. If filter is not none, the timeseries will be convolved with the provided coefficients during the mergepolarizations function.
-    mergedrecords=mergepolarizations(event,arraymapdictionaries,Filter)
+    mergedrecords=mergepolarizations(event,arraymapdictionaries,lwa_df,Filter)
 
     xcoords=np.asarray([record['x'] for record in mergedrecords])
     ycoords=np.asarray([record['y'] for record in mergedrecords])
@@ -691,7 +691,7 @@ def plot_event_total_power_snr(event,arraymapdictionaries,minimum_ok_rms=25,maxi
                 
     return
 
-def plot_event_snr_polaverage(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,annotate=False,Filter='None'):
+def plot_event_snr_polaverage(event,arraymapdictionaries,lwa_df,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,annotate=False,Filter='None'):
     #cmin=0
     #cmax=35
     #Plots the average of the pol A and pol B snrs, over the antenna positions of the array
@@ -701,7 +701,7 @@ def plot_event_snr_polaverage(event,arraymapdictionaries,minimum_ok_rms=25,maxim
     #bounds set by minimum_ok_rms, maximum_ok_rms, minimum_ok_kurtosis, maximum_ok_kurtosis
     #Antennas are labelled if annotate=True
     #Filter can be None or a 1D numpy array of coefficients for a time-domain FIR. If filter is not none, the timeseries will be convolved with the provided coefficients during the mergepolarizations function.
-    mergedrecords=mergepolarizations(event,arraymapdictionaries,Filter)
+    mergedrecords=mergepolarizations(event,arraymapdictionaries,lwa_df,Filter)
 
     xcoords=np.asarray([record['x'] for record in mergedrecords])
     ycoords=np.asarray([record['y'] for record in mergedrecords])
@@ -774,7 +774,7 @@ def plot_event_snr_polaverage(event,arraymapdictionaries,minimum_ok_rms=25,maxim
                 
     return
 
-def plot_event_toas(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,annotate=False,Filter='None'):
+def plot_event_toas(event,arraymapdictionaries,lwa_df,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,annotate=False,Filter='None'):
     #Plots the time of arrival for each antenna and polarization of an event, over the antenna positions of the array
     #time of arrival is in units of clock cycles with respect to the earliest packet timestamp in the event
     #Event is a list of records (single-packet dictionaries) belonging to the same event
@@ -783,7 +783,7 @@ def plot_event_toas(event,arraymapdictionaries,minimum_ok_rms=25,maximum_ok_rms=
     #Antennas are labelled if annotate=True
     #Filter can be None or a 1D numpy array of coefficients for a time-domain FIR. If filter is not none, the timeseries will be convolved with the provided coefficients.
     
-    mergedrecords=mergepolarizations(event,arraymapdictionaries,Filter)
+    mergedrecords=mergepolarizations(event,arraymapdictionaries,lwa_df,Filter)
 
     xcoords=np.asarray([record['x'] for record in mergedrecords])
     ycoords=np.asarray([record['y'] for record in mergedrecords])
