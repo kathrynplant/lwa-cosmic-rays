@@ -11,7 +11,7 @@ from scipy.optimize import curve_fit
 import scipy.stats as st
 from scipy import signal
 
-
+### functions for building fast way to lookup antenna names
 def lookup_antname(lwa_df,snap,inp):
     #Returns the antenna name string given an array configuration dataframe, a snap board number, and an input number.
     #adapted from lwa_antpos.mapping.snap2_to_antpol
@@ -27,6 +27,17 @@ def lookup_antname(lwa_df,snap,inp):
     else:
         return lwa_df.iloc[sel].index.to_list()[0] + 'B'
 
+def build_mapping_dictionary(lwa_df):
+    fpgamappingdictionary={}
+    for s in range(1,12):
+        for i  in range(0,64):
+            fpgamappingdictionary['s'+str(s)+'i'+str(i)]=lookup_antname(lwa_df,s,i)
+    return fpgamappingdictionary
+
+def lookup_antname_in_dictionary(namedict,snap,inp):
+    return namedict['s'+str(snap)+'i'+str(inp)]
+        
+#functions for loading and parsing data
 def printheader(rawpacketdata):
     #parse the header
     #From MSB to LSB the header is:
@@ -91,6 +102,7 @@ def parseheader(rawpacketdata):
     headerdictionary['veto_role'] = int(headerword[31])
     return headerdictionary
 
+#@profile
 def unpackdata(rawpacketdata,datatype):
     #parse raw bytes into a numpy array
     #pairs of bytes are interpreted as 16 bit integers, and the last 32 bytes are omitted as they are the header
@@ -103,6 +115,7 @@ def unpackdata(rawpacketdata,datatype):
         unpackeddata[i]=value[0] 
     return unpackeddata
 
+#@profile
 def read_in_chunks(file_object, chunk_size):
     """Lazy function (generator) to read a file piece by piece.
     taken from https://stackoverflow.com/questions/519633/lazy-method-for-reading-big-file-in-python"""
@@ -112,6 +125,7 @@ def read_in_chunks(file_object, chunk_size):
             break
         yield data
 
+#@profile
 def parsefile(fname, start_ind=None, end_ind=None):
     #get data and header from a file (fname) with raw data from an arbitrary number of cosmic ray packets
     #returns a list of dictionaries, with one dictionary per packet
@@ -136,11 +150,13 @@ def parsefile(fname, start_ind=None, end_ind=None):
                 break
     return records
 
+#@profile
 def packet_ant_id_2_snap_input(i):
     #This function returns the snap input number corresponding to a packet with integer i in the antenna_id field in the packet header
     #someday the need for this remapping could probably be addressed in the firmware
     return (i&0b111000)+((i+1)&0b000111)
 
+#@profile
 def distinguishevents(records,maxoffset):
     #This function turns a list of single-antenna records into a list of events.
     #records is a list of single-antenna records, such as that returned by parsefile.
@@ -174,17 +190,20 @@ def distinguishevents(records,maxoffset):
     events.append(currentevent_indices)
     return events
 
-
-def mergepolarizations(event,arraymapdictionary,lwa_df,Filter='None'):
+#@profile
+def mergepolarizations(event,arraymapdictionary,namedict,Filter='None'):
     #this function takes single-polarization dictionaries such as that output by parsefile and merges polarization pairs into a single dictionary for each antenna stand
     #event is a list of records, in the format output by parsefile, that all belong with one event
-    #arraymap dictionary and lwa_df contain configuration information
+    #arraymap dictionary contains antenna position information
+    #namedict is a dictionary of antenna names as output by the build_mapping_dictionary function
+
     #Filter can be None or a 1D numpy array of coefficients for a time-domain FIR. If filter is not none, the timeseries will be convolved with the provided coefficients during the mergepolarizations function.
+
     xdict,ydict,zdict=arraymapdictionary
     average_window=(1/4)*np.ones(4)
 
     for record in event:
-        record['antname']=lookup_antname.snap2_to_antpol(lwa_df,record['board_id'],record['antenna_id'])
+        record['antname']=lookup_antname_in_dictionary(namedict,record['board_id'],record['antenna_id'])
 
     merging=[record for record in event if record['antname'][-1]=='A']
     polB=[record for record in event if record['antname'][-1]=='B']
@@ -249,7 +268,7 @@ def mergepolarizations(event,arraymapdictionary,lwa_df,Filter='None'):
         mergedrecords.append(newrecord)
     return mergedrecords
 
-def inject_simulation(records,pulse_antennas,pulse,ok_vetos_fname,veto_thresh,lwa_df):
+def inject_simulation(records,pulse_antennas,pulse,ok_vetos_fname,veto_thresh,namedict):
     #Simulate an event by adding a delta function pulse to the timeseries for certain antennas
     #This is designed to add pulses to data from untriggered snapshots, as a quick test of selection cuts 
     #records is a list of single-antenna records such as that output by parsefile
@@ -258,12 +277,12 @@ def inject_simulation(records,pulse_antennas,pulse,ok_vetos_fname,veto_thresh,lw
     #ok_vetos_fname is the file name of a numpy file with an array indicating which signals are veto antennas (same format as used by the code to run the detector)
     #veto_thresh is the desired veto threshold to use
     #returns a list of records that have the pulses added to them
-    #lwa_df is the array configuration spreadsheet read in by mapping
+    #namedict is a dictionary of antenna names as output by the build_mapping_dictionary function
     ok_vetos=np.load(ok_vetos_fname)
     for r in records:
         snap=r['board_id']
         snapinput=r['antenna_id']
-        antname=lookup_antname(lwa_df,snap,snapinput)
+        antname=lookup_antname_in_dictionary(namedict,snap,snapinput)
         if ok_vetos[snap-1,snapinput]:
             r['veto_role']=1
             r['veto_power_threshold']=[veto_thresh]
@@ -314,14 +333,15 @@ def grad_toa_plane(ant_coords,theta,phi):
     dtdphi=(math.pi/180)*(sample_rate/c)*((-y*math.sin(theta_rad)*math.sin(phi_rad)) +(x*math.sin(theta_rad)*math.cos(phi_rad)))
     return np.asarray([dtdtheta,dtdphi]).transpose()
 
-def rank_by_snr(event,arraymapdictionaries,lwa_df,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,Filter='None'):
+def rank_by_snr(event,arraymapdictionaries,namedict,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,Filter='None'):
     # Return a list of antenna names and snrs in order from strongest snr to smallest , in separate rankings for each polarization and for core and distant antennas
     #Event is a list of records (single-packet dictionaries) belonging to the same event
     #Only antennas with signals (in the first half of the buffer) that satisfy the specified rms and kurtosis cuts are included in the ranking
-        #Filter can be None or a 1D numpy array of coefficients for a time-domain FIR. If filter is not none, the timeseries will be convolved with the provided coefficients during the mergepolarizations function.
-    
-    mergedrecords=mergepolarizations(event,arraymapdictionaries,lwa_df,Filter)
+    #Filter can be None or a 1D numpy array of coefficients for a time-domain FIR. If filter is not none, the timeseries will be convolved with the provided coefficients during the mergepolarizations function.
+    #namedict is a dictionary of antenna names as output by the build_mapping_dictionary function
 
+    mergedrecords=mergepolarizations(event,arraymapdictionaries,namedict,Filter)
+    
     xcoords=np.asarray([record['x'] for record in mergedrecords])
     ycoords=np.asarray([record['y'] for record in mergedrecords])
     zcoords=np.asarray([record['z'] for record in mergedrecords])
@@ -487,7 +507,7 @@ def plot_power_timeseries(event,antenna_names,zoom='peak',Filter1='None',Filter2
                 plt.xlim(zoom[0],zoom[1])
     return
 
-def plot_event_snr(event,arraymapdictionaries,lwa_df,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,annotate=False,Filter='None'):
+def plot_event_snr(event,arraymapdictionaries,namedict,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,annotate=False,Filter='None'):
     #cmin=0
     #cmax=35
     #Plots the snr for each polarization of an event, over the antenna positions of the array
@@ -497,7 +517,9 @@ def plot_event_snr(event,arraymapdictionaries,lwa_df,minimum_ok_rms=25,maximum_o
     #bounds set by minimum_ok_rms, maximum_ok_rms, minimum_ok_kurtosis, maximum_ok_kurtosis
     #Antennas are labelled if annotate=True
     #Filter can be None or a 1D numpy array of coefficients for a time-domain FIR. If filter is not none, the timeseries will be convolved with the provided coefficients during the mergepolarizations function.
-    mergedrecords=mergepolarizations(event,arraymapdictionaries,lwa_df,Filter)
+    #namedict is a dictionary of antenna names as output by the build_mapping_dictionary function
+
+    mergedrecords=mergepolarizations(event,arraymapdictionaries,namedict,Filter)
 
     xcoords=np.asarray([record['x'] for record in mergedrecords])
     ycoords=np.asarray([record['y'] for record in mergedrecords])
@@ -601,7 +623,7 @@ def plot_event_snr(event,arraymapdictionaries,lwa_df,minimum_ok_rms=25,maximum_o
 
     return
 
-def plot_event_total_power_snr(event,arraymapdictionaries,lwa_df,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,annotate=False,Filter='None'):
+def plot_event_total_power_snr(event,arraymapdictionaries,namedict,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,annotate=False,Filter='None'):
     #cmin=0
     #cmax=35
     #Plots the snr over the antenna positions of the array
@@ -610,8 +632,9 @@ def plot_event_total_power_snr(event,arraymapdictionaries,lwa_df,minimum_ok_rms=
     #Antennas are filtered to only plot antennas whose signals (in the first half of the buffer) are within the
     #bounds set by minimum_ok_rms, maximum_ok_rms, minimum_ok_kurtosis, maximum_ok_kurtosis
     #Antennas are labelled if annotate=True
+    #namedict is a dictionary of antenna names as output by the build_mapping_dictionary function
     #Filter can be None or a 1D numpy array of coefficients for a time-domain FIR. If filter is not none, the timeseries will be convolved with the provided coefficients during the mergepolarizations function.
-    mergedrecords=mergepolarizations(event,arraymapdictionaries,lwa_df,Filter)
+    mergedrecords=mergepolarizations(event,arraymapdictionaries,namedict,Filter)
 
     xcoords=np.asarray([record['x'] for record in mergedrecords])
     ycoords=np.asarray([record['y'] for record in mergedrecords])
@@ -691,7 +714,7 @@ def plot_event_total_power_snr(event,arraymapdictionaries,lwa_df,minimum_ok_rms=
                 
     return
 
-def plot_event_snr_polaverage(event,arraymapdictionaries,lwa_df,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,annotate=False,Filter='None'):
+def plot_event_snr_polaverage(event,arraymapdictionaries,namedict,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,annotate=False,Filter='None'):
     #cmin=0
     #cmax=35
     #Plots the average of the pol A and pol B snrs, over the antenna positions of the array
@@ -700,8 +723,9 @@ def plot_event_snr_polaverage(event,arraymapdictionaries,lwa_df,minimum_ok_rms=2
     #Antennas are filtered to only plot antennas whose signals (in the first half of the buffer) are within the
     #bounds set by minimum_ok_rms, maximum_ok_rms, minimum_ok_kurtosis, maximum_ok_kurtosis
     #Antennas are labelled if annotate=True
+    #namedict is a dictionary of antenna names as output by the build_mapping_dictionary function
     #Filter can be None or a 1D numpy array of coefficients for a time-domain FIR. If filter is not none, the timeseries will be convolved with the provided coefficients during the mergepolarizations function.
-    mergedrecords=mergepolarizations(event,arraymapdictionaries,lwa_df,Filter)
+    mergedrecords=mergepolarizations(event,arraymapdictionaries,namedict,Filter)
 
     xcoords=np.asarray([record['x'] for record in mergedrecords])
     ycoords=np.asarray([record['y'] for record in mergedrecords])
@@ -774,16 +798,17 @@ def plot_event_snr_polaverage(event,arraymapdictionaries,lwa_df,minimum_ok_rms=2
                 
     return
 
-def plot_event_toas(event,arraymapdictionaries,lwa_df,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,annotate=False,Filter='None'):
+def plot_event_toas(event,arraymapdictionaries,namedict,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,annotate=False,Filter='None'):
     #Plots the time of arrival for each antenna and polarization of an event, over the antenna positions of the array
     #time of arrival is in units of clock cycles with respect to the earliest packet timestamp in the event
     #Event is a list of records (single-packet dictionaries) belonging to the same event
     #Antennas are filtered to only plot antennas whose signals (in the first half of the buffer) are within the
     #bounds set by minimum_ok_rms, maximum_ok_rms, minimum_ok_kurtosis, maximum_ok_kurtosis
     #Antennas are labelled if annotate=True
+    #namedict is a dictionary of antenna names as output by the build_mapping_dictionary function
     #Filter can be None or a 1D numpy array of coefficients for a time-domain FIR. If filter is not none, the timeseries will be convolved with the provided coefficients.
     
-    mergedrecords=mergepolarizations(event,arraymapdictionaries,lwa_df,Filter)
+    mergedrecords=mergepolarizations(event,arraymapdictionaries,namedict,Filter)
 
     xcoords=np.asarray([record['x'] for record in mergedrecords])
     ycoords=np.asarray([record['y'] for record in mergedrecords])

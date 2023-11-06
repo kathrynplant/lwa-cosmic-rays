@@ -51,6 +51,20 @@ max_power_ratio=configuration['max_power_ratio']#cut for ratio of power before a
 
 #inject simulated events? True or False
 simulate=configuration['simulation']
+
+########################## load array map ################################
+array_map=pd.read_csv(array_map_filename)
+xdict={}
+ydict={}
+zdict={}
+for i,n in enumerate(array_map['antname']):
+    xdict[n]=array_map['x'][i]
+    ydict[n]=array_map['y'][i]
+    zdict[n]=array_map['elevation'][i]
+arraymapdictionaries=[xdict,ydict,zdict]
+
+lwa_df = reading.read_antpos_etcd()
+namedict=build_mapping_dictionary(lwa_df)
                        
 ####################################### load data ###########################################################
 records = parsefile(fname,end_ind=stop_index) 
@@ -60,7 +74,7 @@ if simulate:
     veto_thresh=configuration['veto_thresh']
     ok_vetos_fname=configuration['ok_vetos_fname']
     pulse_antennas=configuration['pulse_antennas']
-    records=inject_simulation(records,pulse_antennas,pulse,ok_vetos_fname,veto_thresh,lwa_df)
+    records=inject_simulation(records,pulse_antennas,pulse,ok_vetos_fname,veto_thresh,namedict)
                        
 ###################### Organize list of single-antenna records into list of events ############################################
 events=distinguishevents(records,200)
@@ -76,22 +90,10 @@ for e in complete_events:
     if (e!=[n for n in range(np.min(e),np.min(e)+704)]):
         scrambled_events+=1
 
-########################## load array map ################################
-array_map=pd.read_csv(array_map_filename)
-xdict={}
-ydict={}
-zdict={}
-for i,n in enumerate(array_map['antname']):
-    xdict[n]=array_map['x'][i]
-    ydict[n]=array_map['y'][i]
-    zdict[n]=array_map['elevation'][i]
-arraymapdictionaries=[xdict,ydict,zdict]
-
-lwa_df = reading.read_antpos_etcd()
 
 ##########Calculate Summary info ####################
 
-#parameters for antenna-based cuts
+#parameters for antenna-based cuts  #WHY ARE THESE BEING RE-SET INSTEAD OF FROM THE CONFIG?
 maximum_ok_power=50**2
 minimum_ok_power=30**2
 minsnr=5
@@ -125,7 +127,7 @@ minmeanpowerafterB=np.zeros(len(complete_events))
 #go through each event
 for i,event_indices in enumerate(complete_events):  
     event=[records[i] for i in event_indices]
-    mergedrecords=mergepolarizations(event,arraymapdictionaries,lwa_df,Filter=h)
+    mergedrecords=mergepolarizations(event,arraymapdictionaries,namedict,Filter=h)
 
     xcoords=np.asarray([record['x'] for record in mergedrecords])
     ycoords=np.asarray([record['y'] for record in mergedrecords])
