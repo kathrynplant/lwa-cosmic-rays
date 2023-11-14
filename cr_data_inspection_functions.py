@@ -75,18 +75,6 @@ def parseheader(rawpacketdata):
     headerdictionary['veto_role'] = int(headerword[31])
     return headerdictionary
 
-def unpackdata(rawpacketdata,datatype):
-    #parse raw bytes into a numpy array
-    #pairs of bytes are interpreted as 16 bit integers, and the last 32 bytes are omitted as they are the header
-    #raw packet data is the data payload of a UDP packet from the cosmic ray firmware, including the header word
-    #datatype can be signed or unsigned and big endian or little endian, but must be a 16-bit data type. This argument was only for debugging
-    nbytes=len(rawpacketdata)
-    unpackeddata=np.zeros(int((nbytes-32)/2),dtype=datatype)
-    for i in range(int((nbytes-32)/2)):
-        value=struct.unpack(datatype,rawpacketdata[(2*i):(2*i +2)]) #read a pair of bytes as an integer. Last 32 bytes are header
-        unpackeddata[i]=value[0] 
-    return unpackeddata
-
 def read_in_chunks(file_object, chunk_size):
     """Lazy function (generator) to read a file piece by piece.
     taken from https://stackoverflow.com/questions/519633/lazy-method-for-reading-big-file-in-python"""
@@ -113,7 +101,7 @@ def parsefile(fname, start_ind=None, end_ind=None):
         datafile.seek(byte_start)
         for piece in read_in_chunks(datafile, packet_size):
             data_dict = parseheader(piece)
-            data_dict['data'] = unpackdata(piece, '>h')[16:-32]
+            data_dict['data'] =np.frombuffer(piece[:-32],dtype='>h')[16:-32]
             records.append(data_dict)
             i+=1
             if i == end_ind:
