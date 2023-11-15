@@ -11,6 +11,7 @@ import scipy.stats as st
 from scipy import signal
 
 ### functions for building fast way to lookup antenna names
+#@profile
 def lookup_antname(lwa_df,snap,inp):
     #Returns the antenna name string given an array configuration dataframe, a snap board number, and an input number.
     #adapted from lwa_antpos.mapping.snap2_to_antpol
@@ -25,7 +26,7 @@ def lookup_antname(lwa_df,snap,inp):
         return lwa_df.iloc[sel].index.to_list()[0] + 'A'
     else:
         return lwa_df.iloc[sel].index.to_list()[0] + 'B'
-
+#@profile
 def build_mapping_dictionary(lwa_df):
     fpgamappingdictionary={}
     for s in range(1,12):
@@ -33,6 +34,7 @@ def build_mapping_dictionary(lwa_df):
             fpgamappingdictionary['s'+str(s)+'i'+str(i)]=lookup_antname(lwa_df,s,i)
     return fpgamappingdictionary
 
+#@profile
 def lookup_antname_in_dictionary(namedict,snap,inp):
     return namedict['s'+str(snap)+'i'+str(inp)]
         
@@ -81,6 +83,7 @@ def printheader(rawpacketdata):
     print('veto role',headerword[31])
     return
 
+#@profile
 def parseheader(rawpacketdata):
     #rawpacketdata is the entire raw data payload previously extracted from a cosmic ray udp packet
     #returns a dictionary containing the metadata from the packet header, which it should be noted is the last 256 bits of the UDP data payload
