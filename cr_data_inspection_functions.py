@@ -9,6 +9,7 @@ import math
 from scipy.optimize import curve_fit
 import scipy.stats as st
 from scipy import signal
+from lwa_antpos import mapping
 
 ### functions for building fast way to lookup antenna names
 #@profile
@@ -192,7 +193,7 @@ def mergepolarizations(event,arraymapdictionary,namedict,Filter='None'):
     average_window=(1/4)*np.ones(4)
 
     for record in event:
-        record['antname']=lookup_antname_in_dictionary(namedict,record['board_id'],record['antenna_id'])
+        record['antname']=lookup_antname_in_dictionary(namedict,record['board_id'],packet_ant_id_2_snap_input(record['antenna_id']))
 
     merging=[record for record in event if record['antname'][-1]=='A']
     polB=[record for record in event if record['antname'][-1]=='B']
@@ -270,7 +271,7 @@ def inject_simulation(records,pulse_antennas,pulse,ok_vetos_fname,veto_thresh,na
     ok_vetos=np.load(ok_vetos_fname)
     for r in records:
         snap=r['board_id']
-        snapinput=r['antenna_id']
+        snapinput=packet_ant_id_2_snap_input(r['antenna_id'])
         antname=lookup_antname_in_dictionary(namedict,snap,snapinput)
         if ok_vetos[snap-1,snapinput]:
             r['veto_role']=1
@@ -393,7 +394,7 @@ def plot_timeseries(event,antenna_names,zoom='peak',Filter='None'):
     #Filter can be None or a 1D numpy array of coefficients for a time-domain FIR. If filter is not 'None', the timeseries will be convolved with the provided coefficients.
     for record in event:
         s=record['board_id']
-        a=record['antenna_id']
+        a=packet_ant_id_2_snap_input(record['antenna_id'])
         antname=mapping.snap2_to_antpol(s,a)
         if antname in antenna_names:
             timeseries=record['data']
@@ -460,7 +461,7 @@ def plot_power_timeseries(event,antenna_names,zoom='peak',Filter1='None',Filter2
     #Filter2 is a smoothing kernel to apply AFTER squaring the voltage timeseries to obtain a power timeseries
     for record in event:
         s=record['board_id']
-        a=record['antenna_id']
+        a=packet_ant_id_2_snap_input(record['antenna_id'])
         antname=mapping.snap2_to_antpol(s,a)
         if antname in antenna_names:
             timeseries=record['data']
@@ -981,7 +982,7 @@ def plot_select_antennas(event,antennas):
     #The requested antennas are plotted in the order they appear in event, not in the order of the input list
     for record in event:
         s=record['board_id']
-        a=record['antenna_id']
+        a=packet_ant_id_2_snap_input(record['antenna_id'])
         antname=mapping.snap2_to_antpol(s,a)
         if (s,a) in antennas:
             timeseries=record['data']
