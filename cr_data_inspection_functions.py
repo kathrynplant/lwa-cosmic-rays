@@ -920,7 +920,7 @@ def plot_all_timeseries(event):
             if i<len(singleboard):
                 record=singleboard[i]
                 antenna=packet_ant_id_2_snap_input(record['antenna_id']) #Get the snap2 input number
-                antname=mapping.snap2_to_antpol(b+1,antenna) #TODO zero index the boards or 1-index??
+                antname=mapping.snap2_to_antpol(b,antenna) 
 
                 timeseries=record['data']
                 plt.plot(timeseries)
@@ -942,7 +942,7 @@ def plot_all_spectra(event):
             if i<len(singleboard):
                 record=singleboard[i]
                 antenna=packet_ant_id_2_snap_input(record['antenna_id']) #Get the snap2 input number
-                antname=mapping.snap2_to_antpol(b+1,antenna) #TODO zero index the boards or 1-index??
+                antname=mapping.snap2_to_antpol(b,antenna)
                 timeseries=record['data']
                 spec=np.fft.rfft(timeseries)
                 plt.plot(np.log(np.square(np.abs(spec))))
@@ -963,7 +963,7 @@ def plot_all_histograms(event):
             if i<len(singleboard):
                 record=singleboard[i]
                 antenna=packet_ant_id_2_snap_input(record['antenna_id']) #Get the snap2 input number
-                antname=mapping.snap2_to_antpol(b+1,antenna) #TODO zero index the boards or 1-index??
+                antname=mapping.snap2_to_antpol(b,antenna)
 
                 timeseries=record['data']
                 plt.hist(timeseries)
@@ -984,7 +984,7 @@ def plot_select_antennas(event,antennas):
         s=record['board_id']
         a=packet_ant_id_2_snap_input(record['antenna_id'])
         antname=mapping.snap2_to_antpol(s,a)
-        if (s,a) in antennas:
+        if antname in antennas:
             timeseries=record['data']
             plt.figure(figsize=(20,5))
             plt.suptitle(antname + ' snap '+ str(s) + ' antenna ' + str(a))
