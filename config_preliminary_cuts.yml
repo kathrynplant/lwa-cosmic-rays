@@ -38,10 +38,8 @@ filter: [0.000049291111379545783611425685544205066,
     0.085289616177628382875930412865272955969,
     0.012255497574972781804625299173494568095,
     0.000049291111379545783611425685544205066]
-maximum_ok_power: 50
-minimum_ok_power: 15
-#minimum signal to noise ratio, calculated as ratio of peak to mean of smoothed power timeseries from filtered voltages 
-minsnr: 5 
+maximum_ok_power: 2500
+minimum_ok_power: 225
 #minimum acceptable excess kurtosis
 minimum_ok_kurtosis: -1
 #maximum acceptable excess kurtosis
@@ -51,8 +49,6 @@ maximum_ok_kurtosis: 1
 minmaxstrengthratio: 2.5
 #core vs distant ratio
 mintop5ratio: 2.5 
-#replicate Ryan's cut for strong detections
-minstrongdetections: 50 
 #cut for ratio of power before and after event
 min_power_ratio: 0.5 
 max_power_ratio: 1.7 

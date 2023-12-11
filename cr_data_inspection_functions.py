@@ -181,6 +181,102 @@ def distinguishevents(records,maxoffset):
     return events
 
 #@profile
+def summarize_signals(event,Filter,namedict,xdict,ydict,zdict):
+    #make an array that will have one row per antenna signal, and one column per element of summary info
+    datatypes={'names':('antname','pol','x', 'y', 'z','distance','index_raw_peak','index_smooth_peak',
+                        'raw_peak','smooth_peak','mean_power','mean_power_after','powerratio','kurtosis','snr',
+                        'veto_power_threshold','veto_role','nsaturate'),
+                          'formats':('U10', 'U10',np.single,np.single,np.single,np.single,np.uintc, np.uintc,np.intc,
+                                     np.single,np.single,np.single,np.single,np.single,np.single,np.uint,np.uintc,np.int)}
+    single_event_summarray=np.zeros(len(event), dtype=datatypes)
+    
+    #loop over all the records in the event, calculating the summary info
+    average_window=(1/4)*np.ones(4)
+
+    for r,record in enumerate(event):
+        record['antname']=lookup_antname_in_dictionary(namedict,record['board_id'],packet_ant_id_2_snap_input(record['antenna_id']))
+        antname=record['antname'][:-1]
+        pol=record['antname'][-1]
+        x=xdict[antname]
+        y=ydict[antname]
+        z=zdict[antname]
+        distance=(x**2)+(y**2)
+        data = record['data']
+        index_raw_peak = np.argmax(data)
+        raw_peak = data[index_raw_peak]
+        nsaturate = np.sum(np.abs(data)>510)
+        veto_power_threshold = record['veto_power_threshold'][0]
+        veto_role = record['veto_role']
+        if type(Filter)==np.ndarray:
+            data=signal.convolve(data,Filter,mode='valid')
+        powertimeseries=np.square(data)
+        smoothed=signal.convolve(powertimeseries,average_window,mode='valid')
+        index_smooth_peak = np.argmax(smoothed)
+        smooth_peak = smoothed[index_smooth_peak]
+        mean_power=np.mean(smoothed[:2000])
+        if index_smooth_peak<3944:
+            mean_power_after = np.mean(smoothed[index_smooth_peak+10:index_smooth_peak+60])
+        else:
+            mean_power_after = 0
+        powerratio = mean_power_after/mean_power
+        kurtosis=st.kurtosis(data[:2000])
+        snr=smooth_peak/mean_power
+        #save the summary info from this record
+        single_event_summarray[r]=(antname,pol,x,y,z,distance,index_raw_peak,index_smooth_peak,raw_peak,
+                                  smooth_peak,mean_power,mean_power_after,powerratio,kurtosis,snr,veto_power_threshold,veto_role,nsaturate)
+    #return the structured array of summary info from all the antennas
+    return single_event_summarray
+
+def flag_antennas(antenna_summary,maximum_ok_power,minimum_ok_power, minimum_ok_kurtosis,maximum_ok_kurtosis):
+    flagged=antenna_summary[antenna_summary['mean_power']<maximum_ok_power]
+    flagged=flagged[flagged['mean_power']>minimum_ok_power]
+    flagged=flagged[flagged['kurtosis']<maximum_ok_kurtosis]
+    flagged=flagged[flagged['index_smooth_peak']<3944]  #last value where valid mean_power_after can be calculated
+    flagged=flagged[flagged['nsaturate']<10]
+    return flagged
+
+def summarize_event(antenna_summary_array):
+    #make selection to separate A and B polarizations
+    Bpol_cut=antenna_summary_array['pol']=='B'
+    Apol_cut=antenna_summary_array['pol']=='A'
+
+    #compare before and after ratio
+    if np.sum(Apol_cut)>0:
+        power_ratioA=np.median(antenna_summary_array['powerratio'][Apol_cut])
+    else:
+        power_ratioA=0
+    if np.sum(Bpol_cut)>0:
+        power_ratioB=np.median(antenna_summary_array['powerratio'][Bpol_cut])
+    else:
+        power_ratioB=0
+
+    #how many veto antennas detect the event
+    peak_exceeds_veto_threshold=antenna_summary_array['raw_peak']>antenna_summary_array['veto_power_threshold']
+    veto_antennas=antenna_summary_array['veto_role']==1
+    n_veto_detections=np.sum(np.logical_and(peak_exceeds_veto_threshold,veto_antennas))
+
+    #compare power in core to power in distant antennas
+    select_core=antenna_summary_array['distance']<(150**2)
+    select_far=antenna_summary_array['distance']>(250**2)
+    core_snrs=antenna_summary_array[select_core]['snr']
+    far_snrs=antenna_summary_array[select_far]['snr']
+    ranked_core_snrs=np.sort(np.copy(core_snrs))
+    ranked_far_snrs=np.sort(np.copy(far_snrs))
+
+    max_core_vs_far_ratio=ranked_core_snrs[-1]/ranked_far_snrs[-1]
+    if len(ranked_core_snrs)> 10:
+        sum_top_5_core_vs_far_ratio=np.sum(ranked_core_snrs[-5:])/np.sum(ranked_far_snrs[-5:])
+        sum_top_10_core_vs_far_ratio=np.sum(ranked_core_snrs[-10:])/np.sum(ranked_far_snrs[-10:])
+    else:
+        sum_top_5_core_vs_far_ratio=0
+        sum_top_10_core_vs_far_ratio=0
+        
+    return power_ratioA,power_ratioB,n_veto_detections,max_core_vs_far_ratio,sum_top_5_core_vs_far_ratio,sum_top_10_core_vs_far_ratio
+
+
+
+
+#@profile
 def mergepolarizations(event,arraymapdictionary,namedict,Filter='None'):
     #this function takes single-polarization dictionaries such as that output by parsefile and merges polarization pairs into a single dictionary for each antenna stand
     #event is a list of records, in the format output by parsefile, that all belong with one event
