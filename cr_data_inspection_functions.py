@@ -201,7 +201,7 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict):
         y=ydict[antname]
         z=zdict[antname]
         distance=(x**2)+(y**2)
-        data = record['data']
+        data = record['data'].astype(np.int32)
         index_raw_peak = np.argmax(data)
         raw_peak = data[index_raw_peak]
         nsaturate = np.sum(np.abs(data)>510)
@@ -317,7 +317,7 @@ def mergepolarizations(event,arraymapdictionary,namedict,Filter='None'):
         newrecord['trigger_role_A'] = record['trigger_role']
         newrecord['antenna_id_A'] =  record['antenna_id'] 
         newrecord['veto_role_A'] = record['veto_role']
-        Adata = record['data']
+        Adata = record['data'].astype(np.int32)
         if Filter!='None':
             Adata=signal.convolve(Adata,Filter,mode='valid')
         newrecord['polA_data']=Adata
@@ -337,7 +337,7 @@ def mergepolarizations(event,arraymapdictionary,namedict,Filter='None'):
                 newrecord['trigger_role_B'] = Brecord['trigger_role']
                 newrecord['antenna_id_B'] =  Brecord['antenna_id'] 
                 newrecord['veto_role_B'] = Brecord['veto_role']
-                Bdata = Brecord['data']
+                Bdata = Brecord['data'].astype(np.int32)
                 if Filter!='None':
                     Bdata=signal.convolve(Bdata,Filter,mode='valid')
                 newrecord['polB_data']=Bdata
@@ -568,7 +568,7 @@ def plot_power_timeseries(event,antenna_names,zoom='peak',Filter1='None',Filter2
 
             if Filter1!='None':
                 timeseries=signal.convolve(timeseries,Filter1,mode='valid')
-            timeseries=np.square(timeseries)
+            timeseries=np.square(timeseries.astype(single))
             if Filter2!='None':
                 timeseries=signal.convolve(timeseries,Filter2,mode='valid')
             powerpeak=np.max(timeseries)
@@ -734,8 +734,8 @@ def plot_event_total_power_snr(event,arraymapdictionaries,namedict,minimum_ok_rm
         #note that in the mergedrecords output the timeseries has already been filtered
         Adata=record['polA_data']
         Bdata=record['polB_data']
-        powertimeseriesA=np.square(Adata)
-        powertimeseriesB=np.square(Bdata)
+        powertimeseriesA=np.square(Adata.astype(np.int32))
+        powertimeseriesB=np.square(Bdata.astype(np.int32))
         powertimeseries=0.5*(powertimeseriesA+powertimeseriesB)
         smoothed=signal.convolve(powertimeseries,average_window,mode='valid')
         noise=np.mean(smoothed[:2000])
