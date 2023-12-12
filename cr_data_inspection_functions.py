@@ -188,7 +188,7 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict):
                         'powerratio','kurtosis','snr',
                         'veto_power_threshold','veto_role','nsaturate'),
                           'formats':('U10', 'U10',np.single,np.single,np.single,np.single,np.uintc, np.uintc,np.intc,
-                                     np.single,np.single,np.single,np.single,np.single,np.single,np.single,np.single
+                                     np.single,np.single,np.single,np.single,np.single,np.single,np.single,np.single,
                                      np.uint,np.uintc,np.int)}
     single_event_summarray=np.zeros(len(event), dtype=datatypes)
     
