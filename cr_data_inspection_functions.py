@@ -184,10 +184,12 @@ def distinguishevents(records,maxoffset):
 def summarize_signals(event,Filter,namedict,xdict,ydict,zdict):
     #make an array that will have one row per antenna signal, and one column per element of summary info
     datatypes={'names':('antname','pol','x', 'y', 'z','distance','index_raw_peak','index_smooth_peak',
-                        'raw_peak','smooth_peak','mean_power','mean_power_after','powerratio','kurtosis','snr',
+                        'raw_peak','filtered_voltage_peak','power_peak','smooth_power_peak','mean_power','mean_power_after',
+                        'powerratio','kurtosis','snr',
                         'veto_power_threshold','veto_role','nsaturate'),
                           'formats':('U10', 'U10',np.single,np.single,np.single,np.single,np.uintc, np.uintc,np.intc,
-                                     np.single,np.single,np.single,np.single,np.single,np.single,np.uint,np.uintc,np.int)}
+                                     np.single,np.single,np.single,np.single,np.single,np.single,np.single,np.single
+                                     np.uint,np.uintc,np.int)}
     single_event_summarray=np.zeros(len(event), dtype=datatypes)
     
     #loop over all the records in the event, calculating the summary info
@@ -209,7 +211,9 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict):
         veto_role = record['veto_role']
         if type(Filter)==np.ndarray:
             data=signal.convolve(data,Filter,mode='valid')
+        filteredvoltagepeak=np.max(np.abs(data))
         powertimeseries=np.square(data)
+        power_peak=np.max(powertimeseries)
         smoothed=signal.convolve(powertimeseries,average_window,mode='valid')
         index_smooth_peak = np.argmax(smoothed)
         smooth_peak = smoothed[index_smooth_peak]
@@ -222,8 +226,7 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict):
         kurtosis=st.kurtosis(data[:2000])
         snr=smooth_peak/mean_power
         #save the summary info from this record
-        single_event_summarray[r]=(antname,pol,x,y,z,distance,index_raw_peak,index_smooth_peak,raw_peak,
-                                  smooth_peak,mean_power,mean_power_after,powerratio,kurtosis,snr,veto_power_threshold,veto_role,nsaturate)
+        single_event_summarray[r]=(antname,pol,x,y,z,distance,index_raw_peak,index_smooth_peak,raw_peak,filtered_voltage_peak,power_peak,                             smooth_peak,mean_power,mean_power_after,powerratio,kurtosis,snr,veto_power_threshold,veto_role,nsaturate)
     #return the structured array of summary info from all the antennas
     return single_event_summarray
 
