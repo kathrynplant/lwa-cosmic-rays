@@ -560,7 +560,7 @@ def plot_power_timeseries(event,antenna_names,zoom='peak',Filter1='None',Filter2
         a=packet_ant_id_2_snap_input(record['antenna_id'])
         antname=mapping.snap2_to_antpol(s,a)
         if antname in antenna_names:
-            timeseries=record['data']
+            timeseries=record['data'].astype(np.int32)
             
             rms=np.std(timeseries[:2000])
             kurtosis=st.kurtosis(timeseries[:2000])
@@ -568,7 +568,7 @@ def plot_power_timeseries(event,antenna_names,zoom='peak',Filter1='None',Filter2
 
             if Filter1!='None':
                 timeseries=signal.convolve(timeseries,Filter1,mode='valid')
-            timeseries=np.square(timeseries.astype(single))
+            timeseries=np.square(timeseries)
             if Filter2!='None':
                 timeseries=signal.convolve(timeseries,Filter2,mode='valid')
             powerpeak=np.max(timeseries)
