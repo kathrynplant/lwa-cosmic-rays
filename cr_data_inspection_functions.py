@@ -211,7 +211,7 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict):
         veto_role = record['veto_role']
         if type(Filter)==np.ndarray:
             data=signal.convolve(data,Filter,mode='valid')
-        filteredvoltagepeak=np.max(np.abs(data))
+        filtered_voltage_peak=np.max(np.abs(data))
         powertimeseries=np.square(data)
         power_peak=np.max(powertimeseries)
         smoothed=signal.convolve(powertimeseries,average_window,mode='valid')
@@ -526,7 +526,7 @@ def plot_spectra(event,antenna_names,zoom='peak',Filter='None'):
     #If a requested antenna to plot is not in the list (which happens if that packet has been lost), the missing antenna is skipped
     #The requested antennas are plotted in the order they appear in event, not in the order of the input list
     #Filter can be None or a 1D numpy array of coefficients for a time-domain FIR. If filter is not 'None', the timeseries will be convolved with the provided coefficients.
-    fs=196.30822126189432
+    fs=197
     for record in event:
         s=record['board_id']
         a=record['antenna_id']
@@ -735,10 +735,10 @@ def plot_event_total_power_snr(event,arraymapdictionaries,namedict,minimum_ok_rm
     snr=np.zeros(len(mergedrecords))
     for i,record in enumerate(mergedrecords):
         #note that in the mergedrecords output the timeseries has already been filtered
-        Adata=record['polA_data']
-        Bdata=record['polB_data']
-        powertimeseriesA=np.square(Adata.astype(np.int32))
-        powertimeseriesB=np.square(Bdata.astype(np.int32))
+        Adata=record['polA_data'].astype(np.int32)
+        Bdata=record['polB_data'].astype(np.int32)
+        powertimeseriesA=np.square(Adata)
+        powertimeseriesB=np.square(Bdata)
         powertimeseries=0.5*(powertimeseriesA+powertimeseriesB)
         smoothed=signal.convolve(powertimeseries,average_window,mode='valid')
         noise=np.mean(smoothed[:2000])
