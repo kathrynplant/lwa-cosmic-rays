@@ -230,13 +230,24 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict):
     #return the structured array of summary info from all the antennas
     return single_event_summarray
 
-def flag_antennas(antenna_summary,maximum_ok_power,minimum_ok_power, minimum_ok_kurtosis,maximum_ok_kurtosis):
-    flagged=antenna_summary[antenna_summary['mean_power']<maximum_ok_power]
-    flagged=flagged[flagged['mean_power']>minimum_ok_power]
-    flagged=flagged[flagged['kurtosis']<maximum_ok_kurtosis]
+def flag_antennas(antenna_summary,maximum_ok_power,minimum_ok_power,minimum_ok_kurtosis,maximum_ok_kurtosis,
+                  max_saturated_samples,known_bad_antennas):
+    #Calculate which antennas pass the statistical criteria
+    ok_power=np.logical_and(antenna_summary['mean_power']<maximum_ok_power,antenna_summary[['mean_power']>minimum_ok_power])
+    ok_kurtosis=np.logical_and(antenna_summary['kurtosis']<maximum_ok_kurtosis,antenna_summary[['kurtosis']>minimum_ok_kurtosis])
+    not_saturating=antenna_summary['nsaturate']<max_saturated_samples
+    total_statistics_cut = np.logical_and(np.logical_and(ok_power,ok_kurtosis),not_saturating)
+    
+    #Calculate how many fail
+    n_power_bad=np.sum(ok_power==0)
+    n_kurtosis_bad=np.sum(ok_kurtosis==0)
+    n_saturated = np.sum(not_saturating==0)
+    
+    #Apply cuts
+    flagged=antenna_summary[total_statistics_cut]
     flagged=flagged[flagged['index_smooth_peak']<3944]  #last value where valid mean_power_after can be calculated
-    flagged=flagged[flagged['nsaturate']<10]
-    return flagged
+    flagged=flagged[flagged['antname'] not in known_bad_antennas]  #Flag antennas that are known in advance
+    return flagged,n_saturated,n_kurtosis_bad,n_power_bad
 
 def summarize_event(antenna_summary_array):
     #make selection to separate A and B polarizations

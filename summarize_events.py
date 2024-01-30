@@ -41,7 +41,9 @@ def main():
     minimum_ok_power=configuration['minimum_ok_power']
     minimum_ok_kurtosis=configuration['minimum_ok_kurtosis']
     maximum_ok_kurtosis=configuration['maximum_ok_kurtosis']
-
+    max_saturated_samples=configuration['maximum_ok_kurtosis']
+    known_bad_antennas=configuration['known_bad_antennas']
+    
     #inject simulated events? True or False
     simulate=configuration['simulation']
 
@@ -86,11 +88,11 @@ def main():
    ##########Calculate Summary info ####################
 
     #array to store summary info for each event
-    datatypes=dtype={'names':('index_in_file','timestamp','n_veto_detections','n_good_antennas','power_ratioA', 
+    datatypes=dtype={'names':('index_in_file','timestamp','n_veto_detections','n_good_antennas','n_saturated','n_kurtosis_bad','n_power_bad','power_ratioA', 
                               'power_ratioB','max_core_vs_far_ratio','sum_top_5_core_vs_far_ratio',
                               'sum_top_10_core_vs_far_ratio'),
-                              'formats':(np.intc, np.uint64, np.uintc,np.uintc,np.single,np.single,np.single,np.single,
-                                         np.single)}
+                              'formats':(np.intc, np.uint64, np.uintc,np.uintc,np.uintc,np.uintc,np.uintc,np.single,
+                                         np.single,np.single,np.single,np.single)}
     summarray = np.zeros(len(complete_events), dtype=datatypes)
 
     #go through each event
@@ -100,8 +102,8 @@ def main():
         #get summary statistics for each antenna signal
         antenna_summary=summarize_signals(event,h,namedict,xdict,ydict,zdict)
         #apply per-antenna signal quality cuts
-        antenna_summary_flagged=flag_antennas(antenna_summary,maximum_ok_power,minimum_ok_power,
-                                              minimum_ok_kurtosis,maximum_ok_kurtosis)
+        antenna_summary_flagged,n_saturated,n_kurtosis_bad,n_power_bad=flag_antennas(antenna_summary,maximum_ok_power,minimum_ok_power,
+                                              minimum_ok_kurtosis,maximum_ok_kurtosis,max_saturated_samples,known_bad_antennas)
         n_good_antennas=len(antenna_summary_flagged)
         #get more summary statistics for whole event
         power_ratioA,power_ratioB,n_veto_detections,max_core_vs_far_ratio,sum_top_5_core_vs_far_ratio,sum_top_10_core_vs_far_ratio=summarize_event(antenna_summary_flagged)
@@ -112,7 +114,7 @@ def main():
             index_in_file=-1e6
         timestamp=event[0]['timestamp']
 
-        summarray[j]=(index_in_file,timestamp,n_veto_detections,n_good_antennas,power_ratioA, 
+        summarray[j]=(index_in_file,timestamp,n_veto_detections,n_good_antennas,n_saturated,n_kurtosis_bad,n_power_bad,power_ratioA, 
                               power_ratioB,max_core_vs_far_ratio,sum_top_5_core_vs_far_ratio,
                               sum_top_10_core_vs_far_ratio)
     #save summary array
