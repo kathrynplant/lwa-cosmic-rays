@@ -181,20 +181,36 @@ def distinguishevents(records,maxoffset):
     return events
 
 #@profile
-def summarize_signals(event,Filter,namedict,xdict,ydict,zdict):
+def summarize_signals(event,Filter,namedict,xdict,ydict,zdict,details=True):
+    
     #make an array that will have one row per antenna signal, and one column per element of summary info
-    datatypes={'names':('antname','pol','x', 'y', 'z','distance','index_raw_peak','index_smooth_peak',
-                        'raw_peak','filtered_voltage_peak','power_peak','smooth_power_peak','mean_power','mean_power_after',
-                        'powerratio','kurtosis','snr',
+    if details==True:
+        datatypes={'names':('antname','pol','x', 'y', 'z','distance',
+                        'index_raw_peak','index_smooth_peak','index_hilbert_peak',
+                        'raw_peak','filtered_voltage_peak','power_peak','smooth_power_peak','hilbert_peak',
+                        'mean_power','mean_power_after','powerratio','kurtosis','snr',
+                            'hilbert_median','hilbert_snr',
                         'veto_power_threshold','veto_role','nsaturate'),
-                          'formats':('U10', 'U10',np.single,np.single,np.single,np.single,np.uintc, np.uintc,np.intc,
-                                     np.single,np.single,np.single,np.single,np.single,np.single,np.single,np.single,
-                                     np.uint,np.uintc,np.int)}
-    single_event_summarray=np.zeros(len(event), dtype=datatypes)
+                          'formats':('U10', 'U10',np.single,np.single,np.single,np.single,
+                                     np.uintc,np.uintc,np.uintc,
+                                    np.single,np.single,np.single,np.single,np.single,
+                                    np.single,np.single,np.single,np.single,np.single,
+                                    np.single,np.single,
+                                    np.uintc,np.uintc,np.uintc)}
+        single_event_summarray=np.zeros(len(event), dtype=datatypes)
+
+    if details==False:
+        datatypes={'names':('antname','pol','x', 'y', 'z','distance',
+                            'index_hilbert_peak','power_peak','hilbert_peak','snr',
+                        'mean_power','mean_power_after','powerratio','kurtosis',
+                        'veto_power_threshold','veto_role','nsaturate'),
+                          'formats':('U10', 'U10',np.single,np.single,np.single,np.single,
+                                    np.uintc,np.single,np.single,np.single,
+                                    np.single,np.single,np.single,np.single,
+                                    np.uintc,np.uintc,np.uintc)}
+        single_event_summarray=np.zeros(len(event), dtype=datatypes)
     
     #loop over all the records in the event, calculating the summary info
-    average_window=(1/4)*np.ones(4)
-
     for r,record in enumerate(event):
         record['antname']=lookup_antname_in_dictionary(namedict,record['board_id'],packet_ant_id_2_snap_input(record['antenna_id']))
         antname=record['antname'][:-1]
@@ -204,29 +220,55 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict):
         z=zdict[antname]
         distance=(x**2)+(y**2)
         data = record['data'].astype(np.int32)
-        index_raw_peak = np.argmax(np.abs(data))
-        raw_peak = math.abs(data[index_raw_peak])
+        index_raw_peak = 2000+np.argmax(np.abs(data[2000:]))
+        raw_peak = data[index_raw_peak]
         nsaturate = np.sum(np.abs(data)>510)
         veto_power_threshold = record['veto_power_threshold'][0]
         veto_role = record['veto_role']
         if type(Filter)==np.ndarray:
             data=signal.convolve(data,Filter,mode='valid')
-        filtered_voltage_peak=np.max(np.abs(data))
+        filtered_voltage_peak=np.max(np.abs(data[2000:]))
         powertimeseries=np.square(data)
-        power_peak=np.max(powertimeseries)
-        smoothed=signal.convolve(powertimeseries,average_window,mode='valid')
-        index_smooth_peak = np.argmax(smoothed)
-        smooth_peak = smoothed[index_smooth_peak]
-        mean_power=np.mean(smoothed[:2000])
-        if index_smooth_peak<3944:
-            mean_power_after = np.mean(smoothed[index_smooth_peak+10:index_smooth_peak+60])
+        power_peak=np.max(powertimeseries[2000:])
+
+
+        mean_power=np.mean(powertimeseries[:2000])
+        kurtosis=st.kurtosis(data[:2000])
+        
+        analytic=sg.hilbert(data)
+        envelope=np.abs(analytic)
+        index_hilbert_peak=2000+np.argmax(envelope[2000:])
+        hilbert_peak=envelope[index_hilbert_peak]
+        snr=hilbert_peak/np.sqrt(mean_power)
+        
+        if index_hilbert_peak<3944:
+            mean_power_after = np.mean(powertimeseries[index_hilbert_peak+10:index_hilbert_peak+60])
         else:
             mean_power_after = 0
         powerratio = mean_power_after/mean_power
-        kurtosis=st.kurtosis(data[:2000])
-        snr=smooth_peak/mean_power
+
+        if details==True:
+            average_window=(1/4)*np.ones(4)
+            smoothed=signal.convolve(powertimeseries,average_window,mode='valid')
+            index_smooth_peak = 2000+np.argmax(smoothed[2000:])
+            smooth_power_peak = smoothed[index_smooth_peak]
+            hilbert_median=np.median(envelope)
+            hilbert_snr=hilbert_peak/hilbert_median
+        
+        
         #save the summary info from this record
-        single_event_summarray[r]=(antname,pol,x,y,z,distance,index_raw_peak,index_smooth_peak,raw_peak,filtered_voltage_peak,power_peak,                             smooth_peak,mean_power,mean_power_after,powerratio,kurtosis,snr,veto_power_threshold,veto_role,nsaturate)
+        if details==True:
+            single_event_summarray[r]=(antname,pol,x,y,z,distance,
+                        index_raw_peak,index_smooth_peak,index_hilbert_peak,
+                        raw_peak,filtered_voltage_peak,power_peak,smooth_power_peak,hilbert_peak,
+                        mean_power,mean_power_after,powerratio,kurtosis,snr,
+                            hilbert_median,hilbert_snr,
+                        veto_power_threshold,veto_role,nsaturate)
+        if details==False:
+            single_event_summarray[r]=(antname,pol,x, y, z,distance,
+                            index_hilbert_peak,power_peak,hilbert_peak,snr,
+                        mean_power,mean_power_after,powerratio,kurtosis,
+                        veto_power_threshold,veto_role,nsaturate)
     #return the structured array of summary info from all the antennas
     return single_event_summarray
 
