@@ -204,8 +204,8 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict):
         z=zdict[antname]
         distance=(x**2)+(y**2)
         data = record['data'].astype(np.int32)
-        index_raw_peak = np.argmax(data)
-        raw_peak = data[index_raw_peak]
+        index_raw_peak = np.argmax(np.abs(data))
+        raw_peak = math.abs(data[index_raw_peak])
         nsaturate = np.sum(np.abs(data)>510)
         veto_power_threshold = record['veto_power_threshold'][0]
         veto_role = record['veto_role']
@@ -233,8 +233,8 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict):
 def flag_antennas(antenna_summary,maximum_ok_power,minimum_ok_power,minimum_ok_kurtosis,maximum_ok_kurtosis,
                   max_saturated_samples,known_bad_antennas):
     #Calculate which antennas pass the statistical criteria
-    ok_power=np.logical_and(antenna_summary['mean_power']<maximum_ok_power,antenna_summary[['mean_power']>minimum_ok_power])
-    ok_kurtosis=np.logical_and(antenna_summary['kurtosis']<maximum_ok_kurtosis,antenna_summary[['kurtosis']>minimum_ok_kurtosis])
+    ok_power=np.logical_and(antenna_summary['mean_power']<maximum_ok_power,antenna_summary['mean_power']>minimum_ok_power)
+    ok_kurtosis=np.logical_and(antenna_summary['kurtosis']<maximum_ok_kurtosis,antenna_summary['kurtosis']>minimum_ok_kurtosis)
     not_saturating=antenna_summary['nsaturate']<max_saturated_samples
     total_statistics_cut = np.logical_and(np.logical_and(ok_power,ok_kurtosis),not_saturating)
     
@@ -246,7 +246,8 @@ def flag_antennas(antenna_summary,maximum_ok_power,minimum_ok_power,minimum_ok_k
     #Apply cuts
     flagged=antenna_summary[total_statistics_cut]
     flagged=flagged[flagged['index_smooth_peak']<3944]  #last value where valid mean_power_after can be calculated
-    flagged=flagged[flagged['antname'] not in known_bad_antennas]  #Flag antennas that are known in advance
+    known_cut= np.asarray([a not in known_bad_antennas for a in flagged['antname']])  #Flag antennas that are known in advance
+    flagged= flagged[known_cut]
     return flagged,n_saturated,n_kurtosis_bad,n_power_bad
 
 def summarize_event(antenna_summary_array):
@@ -265,7 +266,7 @@ def summarize_event(antenna_summary_array):
         power_ratioB=0
 
     #how many veto antennas detect the event
-    peak_exceeds_veto_threshold=antenna_summary_array['raw_peak']>antenna_summary_array['veto_power_threshold']
+    peak_exceeds_veto_threshold=np.square(antenna_summary_array['raw_peak'])>antenna_summary_array['veto_power_threshold']
     veto_antennas=antenna_summary_array['veto_role']==1
     n_veto_detections=np.sum(np.logical_and(peak_exceeds_veto_threshold,veto_antennas))
 
