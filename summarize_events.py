@@ -88,11 +88,12 @@ def main():
    ##########Calculate Summary info ####################
 
     #array to store summary info for each event
-    datatypes=dtype={'names':('index_in_file','timestamp','n_veto_detections','n_good_antennas','n_saturated','n_kurtosis_bad','n_power_bad','power_ratioA', 
-                              'power_ratioB','max_core_vs_far_ratio','sum_top_5_core_vs_far_ratio',
-                              'sum_top_10_core_vs_far_ratio'),
-                              'formats':(np.intc, np.uint64, np.uintc,np.uintc,np.uintc,np.uintc,np.uintc,np.single,
-                                         np.single,np.single,np.single,np.single)}
+    datatypes=dtype={'names':('index_in_file','timestamp','n_veto_detections','n_good_antennas',
+                              'n_saturated','n_kurtosis_bad','n_power_bad','power_ratioA','power_ratioB',
+                              'max_core_vs_far_ratio','sum_top_5_core_vs_far_ratio','sum_top_10_core_vs_far_ratio'),
+                              'formats':(np.intc, np.uint64, np.uintc,np.uintc,
+                                         np.uintc,np.uintc,np.uintc,np.single,np.single,
+                                         np.single,np.single,np.single)}
     summarray = np.zeros(len(complete_events), dtype=datatypes)
 
     #go through each event
@@ -114,9 +115,9 @@ def main():
             index_in_file=-1e6
         timestamp=event[0]['timestamp']
 
-        summarray[j]=(index_in_file,timestamp,n_veto_detections,n_good_antennas,n_saturated,n_kurtosis_bad,n_power_bad,power_ratioA, 
-                              power_ratioB,max_core_vs_far_ratio,sum_top_5_core_vs_far_ratio,
-                              sum_top_10_core_vs_far_ratio)
+        summarray[j]=('index_in_file','timestamp','n_veto_detections','n_good_antennas',
+                              'n_saturated','n_kurtosis_bad','n_power_bad','power_ratioA','power_ratioB',
+                              'max_core_vs_far_ratio','sum_top_5_core_vs_far_ratio','sum_top_10_core_vs_far_ratio')
     #save summary array
     np.save(outdir+shortfname+'.summary',summarray)
     #print file summarry
