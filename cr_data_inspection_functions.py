@@ -650,6 +650,34 @@ def plot_power_timeseries(event,antenna_names,zoom='peak',Filter1='None',Filter2
                 plt.xlim(zoom[0],zoom[1])
     return
 
+def event_scatter_plot(single_event_summary,plotcolumn,xmin,xmax,ymin,ymax,pol,annotate=False,markerscale=1,sqrt=False):
+    single_event_summary_single_pol=single_event_summary[single_event_summary['pol']==pol]
+    #plt.figure(figsize=(7,7),dpi=100)
+    if sqrt==False:
+        coloraxis=single_event_summary_single_pol[plotcolumn]
+    if sqrt==True:
+        coloraxis=np.sqrt(single_event_summary_single_pol[plotcolumn])
+    plt.scatter(single_event_summary_single_pol['x'],single_event_summary_single_pol['y'],
+                c=coloraxis,s=markerscale*single_event_summary_single_pol[plotcolumn])
+    plt.xlim(xmin,xmax)
+    plt.ylim(ymin,ymax)
+    plt.clim(0,np.max(coloraxis))
+    plt.colorbar()
+
+    if annotate:
+        for i in range(len(single_event_summary_single_pol)):
+            x=single_event_summary_single_pol['x'][i]
+            y=single_event_summary_single_pol['y'][i]
+            if (x<xmax) and (y<ymax) and (x>xmin) and (y>ymin):
+                plt.text(x,y, single_event_summary_single_pol['antname'][i][3:],fontsize='x-small')
+    return
+
+def find_antenna(event_records,antname):
+    for r in event_records:
+        if r['antname']==antname:
+            return r
+
+
 def plot_event_snr(event,arraymapdictionaries,namedict,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,annotate=False,Filter='None'):
     #cmin=0
     #cmax=35
