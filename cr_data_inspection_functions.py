@@ -235,7 +235,7 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict,details=True):
         mean_power=np.mean(powertimeseries[:2000])
         kurtosis=st.kurtosis(data[:2000])
         
-        analytic=sg.hilbert(data)
+        analytic=signal.hilbert(data)
         envelope=np.abs(analytic)
         index_hilbert_peak=2000+np.argmax(envelope[2000:])
         hilbert_peak=envelope[index_hilbert_peak]
@@ -272,6 +272,7 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict,details=True):
     #return the structured array of summary info from all the antennas
     return single_event_summarray
 
+#@profile
 def flag_antennas(antenna_summary,maximum_ok_power,minimum_ok_power,minimum_ok_kurtosis,maximum_ok_kurtosis,
                   max_saturated_samples,known_bad_antennas):
     #Calculate which antennas pass the statistical criteria
@@ -287,11 +288,21 @@ def flag_antennas(antenna_summary,maximum_ok_power,minimum_ok_power,minimum_ok_k
     
     #Apply cuts
     flagged=antenna_summary[total_statistics_cut]
-    flagged=flagged[flagged['index_smooth_peak']<3944]  #last value where valid mean_power_after can be calculated
-    known_cut= np.asarray([a not in known_bad_antennas for a in flagged['antname']])  #Flag antennas that are known in advance
-    flagged= flagged[known_cut]
+    flagged=flagged[flagged['index_hilbert_peak']<3944]  #last value where valid mean_power_after can be calculated (exact last value may be a few later)
+    
+    #flag known bad antennas
+    nrows=len(flagged)
+    flag_knowns=np.ones(nrows,dtype=bool)
+    for a in known_bad_antennas:
+        ant=a[:-1]
+        pol=a[-1]
+        for i in range(nrows):
+            if flagged['antname'][i]==ant and flagged['pol'][i]==pol:
+                flag_knowns[i]=0
+    flagged=flagged[flag_knowns]
     return flagged,n_saturated,n_kurtosis_bad,n_power_bad
 
+#@profile
 def summarize_event(antenna_summary_array):
     #make selection to separate A and B polarizations
     Bpol_cut=antenna_summary_array['pol']=='B'
@@ -308,7 +319,7 @@ def summarize_event(antenna_summary_array):
         power_ratioB=0
 
     #how many veto antennas detect the event
-    peak_exceeds_veto_threshold=np.square(antenna_summary_array['raw_peak'])>antenna_summary_array['veto_power_threshold']
+    peak_exceeds_veto_threshold=np.square(antenna_summary_array['power_peak'])>antenna_summary_array['veto_power_threshold']
     veto_antennas=antenna_summary_array['veto_role']==1
     n_veto_detections=np.sum(np.logical_and(peak_exceeds_veto_threshold,veto_antennas))
 
@@ -324,13 +335,56 @@ def summarize_event(antenna_summary_array):
     if len(ranked_core_snrs)> 10:
         sum_top_5_core_vs_far_ratio=np.sum(ranked_core_snrs[-5:])/np.sum(ranked_far_snrs[-5:])
         sum_top_10_core_vs_far_ratio=np.sum(ranked_core_snrs[-10:])/np.sum(ranked_far_snrs[-10:])
+        tenthsnr=ranked_core_snrs[-10]
+        xc,yc,meansnr_nearby,meansnr_nearbyA,meansnr_nearbyB=quick_centroid_power(antenna_summary_array,tenthsnr,50)
     else:
         sum_top_5_core_vs_far_ratio=0
         sum_top_10_core_vs_far_ratio=0
-        
-    return power_ratioA,power_ratioB,n_veto_detections,max_core_vs_far_ratio,sum_top_5_core_vs_far_ratio,sum_top_10_core_vs_far_ratio
+        meansnr_nearby=0
+        meansnr_nearbyA=0
+        meansnr_nearbyB=0
+    
+    meansnr=np.mean(antenna_summary_array['snr'])
+    meansnrA=np.mean(antenna_summary_array[antenna_summary_array['pol']=='A']['snr'])
+    meansnrB=np.mean(antenna_summary_array[antenna_summary_array['pol']=='B']['snr'])
+    
+    return power_ratioA,power_ratioB,n_veto_detections,max_core_vs_far_ratio,sum_top_5_core_vs_far_ratio,sum_top_10_core_vs_far_ratio,meansnr_nearby,meansnr_nearbyA,meansnr_nearbyB,meansnr,meansnrA,meansnrB
 
 
+def quick_centroid_power(antenna_summary,cutoff_snr,zonesize):
+    #This function calculates a center position and returns the x and y coordinates of that position as well as
+    #the mean SNR for (1) all antennas within a maximum distance from the center, (2) all A polarization antennas 
+    #within that distance, and (3) all B polarization antennas within that distance.
+    # antenna_summary is an array summarizing signals from all antennas for one event. The required columns are position (fields 'x' and 'y'), polarization (field name 'pol'), and signal to noise ration (field name 'snr').
+    #cutoff_snr is the minimum SNR cutoff to use for finding the center position
+    #zonesize is the maximum distance from the center to include in the mean snr calculation
+    #The center is found iteratively. First, all antennas with an SNR brighter than cutoff_snr are selected.
+    #A first-iteration center is calculated by finding the average x and y coordinates of the brightest antennas weighted by SNR.
+    #The farthest antenna (among the list of brightest antennas) from the center position is removed and the position is recalculated without it.
+    #The outlier removal and recalculation process is repeated.
+    brightest=antenna_summary[antenna_summary['snr']>=cutoff_snr]
+    n_outliers_to_cut=3
+    i=0
+    while i<n_outliers_to_cut:
+        #calculate center position of current list of selection of brightest
+        xcenter=np.sum(brightest['x']*brightest['snr'])/np.sum(brightest['snr'])
+        ycenter=np.sum(brightest['y']*brightest['snr'])/np.sum(brightest['snr'])
+        #calculate distance from center for all the antennas in the list
+        distance_from_center=np.sqrt((brightest['x']-xcenter)**2+(brightest['y']-ycenter)**2)
+        #exclude the antenna farthest from the center position
+        brightest=brightest[distance_from_center<np.max(distance_from_center)]
+        i+=1 #repeat, unless the maximum number of iterations has been reached
+    all_distances_from_center=np.sqrt((antenna_summary['x']-xcenter)**2+(antenna_summary['y']-ycenter)**2)
+    nearby_antennas=antenna_summary[all_distances_from_center<zonesize]
+    if len(nearby_antennas) > 0:
+        meansnr_nearby=np.mean(nearby_antennas['snr'])
+        meansnr_nearbyA=np.mean(nearby_antennas[nearby_antennas['pol']=='A']['snr'])
+        meansnr_nearbyB=np.mean(nearby_antennas[nearby_antennas['pol']=='B']['snr'])
+    else:
+        meansnr_nearby=0
+        meansnr_nearbyA=0
+        meansnr_nearbyB=0
+    return xcenter,ycenter,meansnr_nearby,meansnr_nearbyA,meansnr_nearbyB
 
 
 #@profile

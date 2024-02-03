@@ -18,7 +18,6 @@ args=parser.parse_args()
 fname = args.fname 
 config = args.config
 
-# @profile
 def main():
     starttime=time.time()
     print('Start time ',starttime)
@@ -90,34 +89,37 @@ def main():
     #array to store summary info for each event
     datatypes=dtype={'names':('index_in_file','timestamp','n_veto_detections','n_good_antennas',
                               'n_saturated','n_kurtosis_bad','n_power_bad','power_ratioA','power_ratioB',
-                              'max_core_vs_far_ratio','sum_top_5_core_vs_far_ratio','sum_top_10_core_vs_far_ratio'),
+                             'max_core_vs_far_ratio','sum_top_5_core_vs_far_ratio','sum_top_10_core_vs_far_ratio',
+                              'meansnr_nearby','meansnr_nearbyA','meansnr_nearbyB',
+                              'meansnr','meansnrA','meansnrB'),
                               'formats':(np.intc, np.uint64, np.uintc,np.uintc,
                                          np.uintc,np.uintc,np.uintc,np.single,np.single,
-                                         np.single,np.single,np.single)}
+                                         np.single,np.single,np.single,
+                                        np.single,np.single,np.single,
+                                        np.single,np.single,np.single)}
     summarray = np.zeros(len(complete_events), dtype=datatypes)
-
     #go through each event
     for j,event_indices in enumerate(complete_events):  
         event=[records[i] for i in event_indices]
-
         #get summary statistics for each antenna signal
-        antenna_summary=summarize_signals(event,h,namedict,xdict,ydict,zdict)
+        antenna_summary=summarize_signals(event,h,namedict,xdict,ydict,zdict,details=False)
         #apply per-antenna signal quality cuts
-        antenna_summary_flagged,n_saturated,n_kurtosis_bad,n_power_bad=flag_antennas(antenna_summary,maximum_ok_power,minimum_ok_power,
-                                              minimum_ok_kurtosis,maximum_ok_kurtosis,max_saturated_samples,known_bad_antennas)
+        antenna_summary_flagged,n_saturated,n_kurtosis_bad,n_power_bad=flag_antennas(antenna_summary,                                                                                 maximum_ok_power,                                                                                minimum_ok_power,minimum_ok_kurtosis,                                                                       maximum_ok_kurtosis,                                                                             max_saturated_samples,                                                                                     known_bad_antennas)
+        
         n_good_antennas=len(antenna_summary_flagged)
         #get more summary statistics for whole event
-        power_ratioA,power_ratioB,n_veto_detections,max_core_vs_far_ratio,sum_top_5_core_vs_far_ratio,sum_top_10_core_vs_far_ratio=summarize_event(antenna_summary_flagged)
-
+        power_ratioA,power_ratioB,n_veto_detections,max_core_vs_far_ratio,sum_top_5_core_vs_far_ratio,sum_top_10_core_vs_far_ratio,meansnr_nearby,meansnr_nearbyA,meansnr_nearbyB,meansnr,meansnrA,meansnrB=summarize_event(antenna_summary_flagged)
         if (event_indices==[n for n in range(np.min(event_indices),np.min(event_indices)+704)]):
             index_in_file=(event_indices[0])
         else:
             index_in_file=-1e6
         timestamp=event[0]['timestamp']
 
-        summarray[j]=('index_in_file','timestamp','n_veto_detections','n_good_antennas',
-                              'n_saturated','n_kurtosis_bad','n_power_bad','power_ratioA','power_ratioB',
-                              'max_core_vs_far_ratio','sum_top_5_core_vs_far_ratio','sum_top_10_core_vs_far_ratio')
+        summarray[j]=(index_in_file,timestamp,n_veto_detections,n_good_antennas,
+                              n_saturated,n_kurtosis_bad,n_power_bad,power_ratioA,power_ratioB,
+                             max_core_vs_far_ratio,sum_top_5_core_vs_far_ratio,sum_top_10_core_vs_far_ratio,
+                              meansnr_nearby,meansnr_nearbyA,meansnr_nearbyB,
+                              meansnr,meansnrA,meansnrB)
     #save summary array
     np.save(outdir+shortfname+'.summary',summarray)
     #print file summarry
