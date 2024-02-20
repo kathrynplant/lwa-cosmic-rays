@@ -241,8 +241,8 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict,details=True):
         hilbert_peak=envelope[index_hilbert_peak]
         snr=hilbert_peak/np.sqrt(mean_power)
         
-        if index_hilbert_peak<3944:
-            mean_power_after = np.mean(powertimeseries[index_hilbert_peak+10:index_hilbert_peak+60])
+        if index_hilbert_peak<3929:
+            mean_power_after = np.mean(powertimeseries[index_hilbert_peak+25:index_hilbert_peak+75])
         else:
             mean_power_after = 0
         powerratio = mean_power_after/mean_power
@@ -307,14 +307,21 @@ def summarize_event(antenna_summary_array):
     #make selection to separate A and B polarizations
     Bpol_cut=antenna_summary_array['pol']=='B'
     Apol_cut=antenna_summary_array['pol']=='A'
+    
+    #make cut for strong detections
+    snr_cut=antenna_summary_array['snr']>6 
+    
+    #combine
+    Apol_snr_cut=np.logical_and(Apol_cut,snr_cut)
+    Bpol_snr_cut=np.logical_and(Bpol_cut,snr_cut)
 
     #compare before and after ratio
-    if np.sum(Apol_cut)>0:
-        power_ratioA=np.median(antenna_summary_array['powerratio'][Apol_cut])
+    if np.sum(Apol_snr_cut)>0:
+        power_ratioA=np.median(antenna_summary_array['powerratio'][Apol_snr_cut])
     else:
         power_ratioA=0
-    if np.sum(Bpol_cut)>0:
-        power_ratioB=np.median(antenna_summary_array['powerratio'][Bpol_cut])
+    if np.sum(Bpol_snr_cut)>0:
+        power_ratioB=np.median(antenna_summary_array['powerratio'][Bpol_snr_cut])
     else:
         power_ratioB=0
 
@@ -440,7 +447,7 @@ def mergepolarizations(event,arraymapdictionary,namedict,Filter='None'):
         index_peak_A=np.argmax(smoothedA)
         newrecord['index_peak_A'] =index_peak_A
         newrecord['peaksmoothedA']=smoothedA[index_peak_A]
-        newrecord['powerafterpeakA']=np.mean(smoothedA[index_peak_A+10:index_peak_A+60])
+        newrecord['powerafterpeakA']=np.mean(smoothedA[index_peak_A+25:index_peak_A+75])
         #find the polB data
         for Brecord in polB:
             if Brecord['antname'][:-1]==antname:
@@ -460,7 +467,7 @@ def mergepolarizations(event,arraymapdictionary,namedict,Filter='None'):
                 index_peak_B=np.argmax(smoothedB)
                 newrecord['index_peak_B'] =index_peak_B
                 newrecord['peaksmoothedB']=np.abs(smoothedB[index_peak_B])       
-                newrecord['powerafterpeakB']=np.mean(smoothedB[index_peak_B+10:index_peak_B+60])
+                newrecord['powerafterpeakB']=np.mean(smoothedB[index_peak_B+25:index_peak_B+75])
 
         mergedrecords.append(newrecord)
     return mergedrecords
