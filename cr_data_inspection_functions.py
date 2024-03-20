@@ -188,14 +188,14 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict,details=True):
         datatypes={'names':('antname','pol','x', 'y', 'z','distance',
                         'index_raw_peak','index_smooth_peak','index_hilbert_peak',
                         'raw_peak','filtered_voltage_peak','power_peak','smooth_power_peak','hilbert_peak',
-                        'mean_power','mean_power_after','powerratio','kurtosis','snr',
-                            'hilbert_median','hilbert_snr',
+                        'mean_power','mean_power_after','powerratio','kurtosis','snr', 
+                            'hilbert_median','hilbert_snr', 'timestamp','tpeak','tpeak_rel',
                         'veto_power_threshold','veto_role','nsaturate'),
                           'formats':('U10', 'U10',np.single,np.single,np.single,np.single,
                                      np.uintc,np.uintc,np.uintc,
                                     np.single,np.single,np.single,np.single,np.single,
                                     np.single,np.single,np.single,np.single,np.single,
-                                    np.single,np.single,
+                                    np.single,np.single,np.int64,np.int64,np.int64,
                                     np.uintc,np.uintc,np.uintc)}
         single_event_summarray=np.zeros(len(event), dtype=datatypes)
 
@@ -209,6 +209,11 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict,details=True):
                                     np.single,np.single,np.single,np.single,
                                     np.uintc,np.uintc,np.uintc)}
         single_event_summarray=np.zeros(len(event), dtype=datatypes)
+    
+    if details==True:
+        #find the timestamp of the earliest FPGA
+        alltimestamps=np.asarray([record['timestamp'] for record in event],dtype=np.int64)
+        mintimestamp=np.min(alltimestamps)
     
     #loop over all the records in the event, calculating the summary info
     for r,record in enumerate(event):
@@ -254,6 +259,9 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict,details=True):
             smooth_power_peak = smoothed[index_smooth_peak]
             hilbert_median=np.median(envelope)
             hilbert_snr=hilbert_peak/hilbert_median
+            timestamp=record['timestamp']
+            tpeak=index_hilbert_peak+timestamp
+            tpeak_rel=tpeak-mintimestamp
         
         
         #save the summary info from this record
@@ -262,7 +270,7 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict,details=True):
                         index_raw_peak,index_smooth_peak,index_hilbert_peak,
                         raw_peak,filtered_voltage_peak,power_peak,smooth_power_peak,hilbert_peak,
                         mean_power,mean_power_after,powerratio,kurtosis,snr,
-                            hilbert_median,hilbert_snr,
+                            hilbert_median,hilbert_snr,timestamp,tpeak,tpeak_rel,
                         veto_power_threshold,veto_role,nsaturate)
         if details==False:
             single_event_summarray[r]=(antname,pol,x, y, z,distance,
