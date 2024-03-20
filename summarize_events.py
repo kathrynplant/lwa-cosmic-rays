@@ -57,7 +57,7 @@ def main():
         zdict[n]=array_map['elevation'][i]
     arraymapdictionaries=[xdict,ydict,zdict]
 
-    lwa_df = reading.read_antpos_etcd()
+    lwa_df = reading.read_antpos_yaml()
     namedict=build_mapping_dictionary(lwa_df)
 
     ####################################### load data ###########################################################
