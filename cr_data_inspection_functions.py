@@ -346,7 +346,7 @@ def summarize_event(antenna_summary_array):
     ranked_core_snrs=np.sort(np.copy(core_snrs))
     ranked_far_snrs=np.sort(np.copy(far_snrs))
 
-    if len(ranked_core_snrs):
+    if len(ranked_core_snrs) and len(ranked_far_snrs):
         max_core_vs_far_ratio=ranked_core_snrs[-1]/ranked_far_snrs[-1]
     else:
         max_core_vs_far_ratio=0
