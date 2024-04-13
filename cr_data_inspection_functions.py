@@ -190,24 +190,24 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict,details=True):
                         'raw_peak','filtered_voltage_peak','power_peak','smooth_power_peak','hilbert_peak',
                         'mean_power','mean_power_after','powerratio','kurtosis','snr', 
                             'hilbert_median','hilbert_snr', 'timestamp','tpeak','tpeak_rel',
-                        'veto_power_threshold','veto_role','nsaturate'),
+                        'veto_power_threshold','nsaturate'),
                           'formats':('U10', 'U10',np.single,np.single,np.single,np.single,
                                      np.uintc,np.uintc,np.uintc,
                                     np.single,np.single,np.single,np.single,np.single,
                                     np.single,np.single,np.single,np.single,np.single,
                                     np.single,np.single,np.int64,np.int64,np.int64,
-                                    np.uintc,np.uintc,np.uintc)}
+                                    np.uintc,np.uintc)}
         single_event_summarray=np.zeros(len(event), dtype=datatypes)
 
     if details==False:
         datatypes={'names':('antname','pol','x', 'y', 'z','distance',
-                            'index_hilbert_peak','power_peak','hilbert_peak','snr',
+                            'index_hilbert_peak','hilbert_peak','snr',
                         'mean_power','mean_power_after','powerratio','kurtosis',
-                        'veto_power_threshold','veto_role','nsaturate'),
+                        'veto_power_threshold','nsaturate'),
                           'formats':('U10', 'U10',np.single,np.single,np.single,np.single,
-                                    np.uintc,np.single,np.single,np.single,
+                                    np.uintc,np.single,np.single,
                                     np.single,np.single,np.single,np.single,
-                                    np.uintc,np.uintc,np.uintc)}
+                                    np.uintc,np.uintc)}
         single_event_summarray=np.zeros(len(event), dtype=datatypes)
     
     if details==True:
@@ -229,7 +229,7 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict,details=True):
         raw_peak = data[index_raw_peak]
         nsaturate = np.sum(np.abs(data)>510)
         veto_power_threshold = record['veto_power_threshold'][0]
-        veto_role = record['veto_role']
+        #veto_role = record['veto_role']
         if type(Filter)==np.ndarray:
             data=signal.convolve(data,Filter,mode='valid')
         filtered_voltage_peak=np.max(np.abs(data[2000:]))
@@ -271,12 +271,12 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict,details=True):
                         raw_peak,filtered_voltage_peak,power_peak,smooth_power_peak,hilbert_peak,
                         mean_power,mean_power_after,powerratio,kurtosis,snr,
                             hilbert_median,hilbert_snr,timestamp,tpeak,tpeak_rel,
-                        veto_power_threshold,veto_role,nsaturate)
+                        veto_power_threshold,nsaturate)
         if details==False:
             single_event_summarray[r]=(antname,pol,x, y, z,distance,
-                            index_hilbert_peak,power_peak,hilbert_peak,snr,
+                            index_hilbert_peak,hilbert_peak,snr,
                         mean_power,mean_power_after,powerratio,kurtosis,
-                        veto_power_threshold,veto_role,nsaturate)
+                        veto_power_threshold,nsaturate)
     #return the structured array of summary info from all the antennas
     return single_event_summarray
 
@@ -334,9 +334,9 @@ def summarize_event(antenna_summary_array):
         power_ratioB=0
 
     #how many veto antennas detect the event
-    peak_exceeds_veto_threshold=np.square(antenna_summary_array['power_peak'])>antenna_summary_array['veto_power_threshold']
-    veto_antennas=antenna_summary_array['veto_role']==1
-    n_veto_detections=np.sum(np.logical_and(peak_exceeds_veto_threshold,veto_antennas))
+    #peak_exceeds_veto_threshold=antenna_summary_array['smoothed_power_peak']>antenna_summary_array['veto_power_threshold']
+    #veto_antennas=antenna_summary_array['veto_role']==1
+    #n_veto_detections=np.sum(np.logical_and(peak_exceeds_veto_threshold,veto_antennas))
 
     #compare power in core to power in distant antennas
     select_core=antenna_summary_array['distance']<(150**2)
@@ -367,7 +367,7 @@ def summarize_event(antenna_summary_array):
     meansnrA=np.mean(antenna_summary_array[antenna_summary_array['pol']=='A']['snr'])
     meansnrB=np.mean(antenna_summary_array[antenna_summary_array['pol']=='B']['snr'])
     
-    return power_ratioA,power_ratioB,n_veto_detections,max_core_vs_far_ratio,sum_top_5_core_vs_far_ratio,sum_top_10_core_vs_far_ratio,meansnr_nearby,meansnr_nearbyA,meansnr_nearbyB,meansnr,meansnrA,meansnrB
+    return power_ratioA,power_ratioB,max_core_vs_far_ratio,sum_top_5_core_vs_far_ratio,sum_top_10_core_vs_far_ratio,meansnr_nearby,meansnr_nearbyA,meansnr_nearbyB,meansnr,meansnrA,meansnrB
 
 
 def quick_centroid_power(antenna_summary,cutoff_snr,zonesize):

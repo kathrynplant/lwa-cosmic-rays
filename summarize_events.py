@@ -87,12 +87,12 @@ def main():
    ##########Calculate Summary info ####################
 
     #array to store summary info for each event
-    datatypes=dtype={'names':('index_in_file','timestamp','n_veto_detections','n_good_antennas',
+    datatypes=dtype={'names':('index_in_file','timestamp','n_good_antennas',
                               'n_saturated','n_kurtosis_bad','n_power_bad','power_ratioA','power_ratioB',
                              'max_core_vs_far_ratio','sum_top_5_core_vs_far_ratio','sum_top_10_core_vs_far_ratio',
                               'meansnr_nearby','meansnr_nearbyA','meansnr_nearbyB',
                               'meansnr','meansnrA','meansnrB'),
-                              'formats':(np.intc, np.uint64, np.uintc,np.uintc,
+                              'formats':(np.intc, np.uint64, np.uintc,
                                          np.uintc,np.uintc,np.uintc,np.single,np.single,
                                          np.single,np.single,np.single,
                                         np.single,np.single,np.single,
@@ -109,16 +109,16 @@ def main():
         n_good_antennas=len(antenna_summary_flagged)
         #get more summary statistics for whole event
         if len(antenna_summary_flagged):
-            power_ratioA,power_ratioB,n_veto_detections,max_core_vs_far_ratio,sum_top_5_core_vs_far_ratio,sum_top_10_core_vs_far_ratio,meansnr_nearby,meansnr_nearbyA,meansnr_nearbyB,meansnr,meansnrA,meansnrB=summarize_event(antenna_summary_flagged)
+            power_ratioA,power_ratioB,max_core_vs_far_ratio,sum_top_5_core_vs_far_ratio,sum_top_10_core_vs_far_ratio,meansnr_nearby,meansnr_nearbyA,meansnr_nearbyB,meansnr,meansnrA,meansnrB=summarize_event(antenna_summary_flagged)
         else:
-            power_ratioA,power_ratioB,n_veto_detections,max_core_vs_far_ratio,sum_top_5_core_vs_far_ratio,sum_top_10_core_vs_far_ratio,meansnr_nearby,meansnr_nearbyA,meansnr_nearbyB,meansnr,meansnrA,meansnrB=0,0,0,0,0,0,0,0,0,0,0,0
+            power_ratioA,power_ratioB,max_core_vs_far_ratio,sum_top_5_core_vs_far_ratio,sum_top_10_core_vs_far_ratio,meansnr_nearby,meansnr_nearbyA,meansnr_nearbyB,meansnr,meansnrA,meansnrB=0,0,0,0,0,0,0,0,0,0,0,0
         if (event_indices==[n for n in range(np.min(event_indices),np.min(event_indices)+704)]):
             index_in_file=(event_indices[0])
         else:
             index_in_file=-1e6
         timestamp=event[0]['timestamp']
 
-        summarray[j]=(index_in_file,timestamp,n_veto_detections,n_good_antennas,
+        summarray[j]=(index_in_file,timestamp,n_good_antennas,
                               n_saturated,n_kurtosis_bad,n_power_bad,power_ratioA,power_ratioB,
                              max_core_vs_far_ratio,sum_top_5_core_vs_far_ratio,sum_top_10_core_vs_far_ratio,
                               meansnr_nearby,meansnr_nearbyA,meansnr_nearbyB,
