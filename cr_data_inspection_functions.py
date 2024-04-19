@@ -484,7 +484,7 @@ def inject_simulation(records,pulse_antennas,pulse,ok_vetos_fname,veto_thresh,na
             r['veto_role']=1
             r['veto_power_threshold']=[veto_thresh]
         if antname in pulse_antennas:
-            data=r['data']
+            data=np.asarray(r['data']).astype(np.int32).copy()
             sample=data[2500]
             if np.abs(sample+pulse)<512:
                 data[2500]=sample+pulse
