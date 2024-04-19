@@ -188,27 +188,32 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict,details=True):
         datatypes={'names':('antname','pol','x', 'y', 'z','distance',
                         'index_raw_peak','index_smooth_peak','index_hilbert_peak',
                         'raw_peak','filtered_voltage_peak','power_peak','smooth_power_peak','hilbert_peak',
-                        'mean_power','mean_power_after','powerratio','kurtosis','snr',
-                            'hilbert_median','hilbert_snr',
-                        'veto_power_threshold','veto_role','nsaturate'),
+                        'mean_power','mean_power_after','powerratio','kurtosis','snr', 
+                            'hilbert_median','hilbert_snr', 'timestamp','tpeak','tpeak_rel',
+                        'veto_power_threshold','nsaturate'),
                           'formats':('U10', 'U10',np.single,np.single,np.single,np.single,
                                      np.uintc,np.uintc,np.uintc,
                                     np.single,np.single,np.single,np.single,np.single,
                                     np.single,np.single,np.single,np.single,np.single,
-                                    np.single,np.single,
-                                    np.uintc,np.uintc,np.uintc)}
+                                    np.single,np.single,np.int64,np.int64,np.int64,
+                                    np.uintc,np.uintc)}
         single_event_summarray=np.zeros(len(event), dtype=datatypes)
 
     if details==False:
         datatypes={'names':('antname','pol','x', 'y', 'z','distance',
-                            'index_hilbert_peak','power_peak','hilbert_peak','snr',
+                            'index_hilbert_peak','hilbert_peak','snr',
                         'mean_power','mean_power_after','powerratio','kurtosis',
-                        'veto_power_threshold','veto_role','nsaturate'),
+                        'veto_power_threshold','nsaturate'),
                           'formats':('U10', 'U10',np.single,np.single,np.single,np.single,
-                                    np.uintc,np.single,np.single,np.single,
+                                    np.uintc,np.single,np.single,
                                     np.single,np.single,np.single,np.single,
-                                    np.uintc,np.uintc,np.uintc)}
+                                    np.uintc,np.uintc)}
         single_event_summarray=np.zeros(len(event), dtype=datatypes)
+    
+    if details==True:
+        #find the timestamp of the earliest FPGA
+        alltimestamps=np.asarray([record['timestamp'] for record in event],dtype=np.int64)
+        mintimestamp=np.min(alltimestamps)
     
     #loop over all the records in the event, calculating the summary info
     for r,record in enumerate(event):
@@ -224,7 +229,7 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict,details=True):
         raw_peak = data[index_raw_peak]
         nsaturate = np.sum(np.abs(data)>510)
         veto_power_threshold = record['veto_power_threshold'][0]
-        veto_role = record['veto_role']
+        #veto_role = record['veto_role']
         if type(Filter)==np.ndarray:
             data=signal.convolve(data,Filter,mode='valid')
         filtered_voltage_peak=np.max(np.abs(data[2000:]))
@@ -241,8 +246,8 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict,details=True):
         hilbert_peak=envelope[index_hilbert_peak]
         snr=hilbert_peak/np.sqrt(mean_power)
         
-        if index_hilbert_peak<3944:
-            mean_power_after = np.mean(powertimeseries[index_hilbert_peak+10:index_hilbert_peak+60])
+        if index_hilbert_peak<3929:
+            mean_power_after = np.mean(powertimeseries[index_hilbert_peak+25:index_hilbert_peak+75])
         else:
             mean_power_after = 0
         powerratio = mean_power_after/mean_power
@@ -254,6 +259,9 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict,details=True):
             smooth_power_peak = smoothed[index_smooth_peak]
             hilbert_median=np.median(envelope)
             hilbert_snr=hilbert_peak/hilbert_median
+            timestamp=record['timestamp']
+            tpeak=index_hilbert_peak+timestamp
+            tpeak_rel=tpeak-mintimestamp
         
         
         #save the summary info from this record
@@ -262,13 +270,13 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict,details=True):
                         index_raw_peak,index_smooth_peak,index_hilbert_peak,
                         raw_peak,filtered_voltage_peak,power_peak,smooth_power_peak,hilbert_peak,
                         mean_power,mean_power_after,powerratio,kurtosis,snr,
-                            hilbert_median,hilbert_snr,
-                        veto_power_threshold,veto_role,nsaturate)
+                            hilbert_median,hilbert_snr,timestamp,tpeak,tpeak_rel,
+                        veto_power_threshold,nsaturate)
         if details==False:
             single_event_summarray[r]=(antname,pol,x, y, z,distance,
-                            index_hilbert_peak,power_peak,hilbert_peak,snr,
+                            index_hilbert_peak,hilbert_peak,snr,
                         mean_power,mean_power_after,powerratio,kurtosis,
-                        veto_power_threshold,veto_role,nsaturate)
+                        veto_power_threshold,nsaturate)
     #return the structured array of summary info from all the antennas
     return single_event_summarray
 
@@ -307,21 +315,28 @@ def summarize_event(antenna_summary_array):
     #make selection to separate A and B polarizations
     Bpol_cut=antenna_summary_array['pol']=='B'
     Apol_cut=antenna_summary_array['pol']=='A'
+    
+    #make cut for strong detections
+    snr_cut=antenna_summary_array['snr']>6 
+    
+    #combine
+    Apol_snr_cut=np.logical_and(Apol_cut,snr_cut)
+    Bpol_snr_cut=np.logical_and(Bpol_cut,snr_cut)
 
     #compare before and after ratio
-    if np.sum(Apol_cut)>0:
-        power_ratioA=np.median(antenna_summary_array['powerratio'][Apol_cut])
+    if np.sum(Apol_snr_cut)>0:
+        power_ratioA=np.median(antenna_summary_array['powerratio'][Apol_snr_cut])
     else:
         power_ratioA=0
-    if np.sum(Bpol_cut)>0:
-        power_ratioB=np.median(antenna_summary_array['powerratio'][Bpol_cut])
+    if np.sum(Bpol_snr_cut)>0:
+        power_ratioB=np.median(antenna_summary_array['powerratio'][Bpol_snr_cut])
     else:
         power_ratioB=0
 
     #how many veto antennas detect the event
-    peak_exceeds_veto_threshold=np.square(antenna_summary_array['power_peak'])>antenna_summary_array['veto_power_threshold']
-    veto_antennas=antenna_summary_array['veto_role']==1
-    n_veto_detections=np.sum(np.logical_and(peak_exceeds_veto_threshold,veto_antennas))
+    #peak_exceeds_veto_threshold=antenna_summary_array['smoothed_power_peak']>antenna_summary_array['veto_power_threshold']
+    #veto_antennas=antenna_summary_array['veto_role']==1
+    #n_veto_detections=np.sum(np.logical_and(peak_exceeds_veto_threshold,veto_antennas))
 
     #compare power in core to power in distant antennas
     select_core=antenna_summary_array['distance']<(150**2)
@@ -331,8 +346,12 @@ def summarize_event(antenna_summary_array):
     ranked_core_snrs=np.sort(np.copy(core_snrs))
     ranked_far_snrs=np.sort(np.copy(far_snrs))
 
-    max_core_vs_far_ratio=ranked_core_snrs[-1]/ranked_far_snrs[-1]
-    if len(ranked_core_snrs)> 10:
+    if len(ranked_core_snrs) and len(ranked_far_snrs):
+        max_core_vs_far_ratio=ranked_core_snrs[-1]/ranked_far_snrs[-1]
+    else:
+        max_core_vs_far_ratio=0
+
+    if (len(ranked_core_snrs)> 10 and len(ranked_far_snrs)>10):
         sum_top_5_core_vs_far_ratio=np.sum(ranked_core_snrs[-5:])/np.sum(ranked_far_snrs[-5:])
         sum_top_10_core_vs_far_ratio=np.sum(ranked_core_snrs[-10:])/np.sum(ranked_far_snrs[-10:])
         tenthsnr=ranked_core_snrs[-10]
@@ -348,7 +367,7 @@ def summarize_event(antenna_summary_array):
     meansnrA=np.mean(antenna_summary_array[antenna_summary_array['pol']=='A']['snr'])
     meansnrB=np.mean(antenna_summary_array[antenna_summary_array['pol']=='B']['snr'])
     
-    return power_ratioA,power_ratioB,n_veto_detections,max_core_vs_far_ratio,sum_top_5_core_vs_far_ratio,sum_top_10_core_vs_far_ratio,meansnr_nearby,meansnr_nearbyA,meansnr_nearbyB,meansnr,meansnrA,meansnrB
+    return power_ratioA,power_ratioB,max_core_vs_far_ratio,sum_top_5_core_vs_far_ratio,sum_top_10_core_vs_far_ratio,meansnr_nearby,meansnr_nearbyA,meansnr_nearbyB,meansnr,meansnrA,meansnrB
 
 
 def quick_centroid_power(antenna_summary,cutoff_snr,zonesize):
@@ -440,7 +459,7 @@ def mergepolarizations(event,arraymapdictionary,namedict,Filter='None'):
         index_peak_A=np.argmax(smoothedA)
         newrecord['index_peak_A'] =index_peak_A
         newrecord['peaksmoothedA']=smoothedA[index_peak_A]
-        newrecord['powerafterpeakA']=np.mean(smoothedA[index_peak_A+10:index_peak_A+60])
+        newrecord['powerafterpeakA']=np.mean(smoothedA[index_peak_A+25:index_peak_A+75])
         #find the polB data
         for Brecord in polB:
             if Brecord['antname'][:-1]==antname:
@@ -460,7 +479,7 @@ def mergepolarizations(event,arraymapdictionary,namedict,Filter='None'):
                 index_peak_B=np.argmax(smoothedB)
                 newrecord['index_peak_B'] =index_peak_B
                 newrecord['peaksmoothedB']=np.abs(smoothedB[index_peak_B])       
-                newrecord['powerafterpeakB']=np.mean(smoothedB[index_peak_B+10:index_peak_B+60])
+                newrecord['powerafterpeakB']=np.mean(smoothedB[index_peak_B+25:index_peak_B+75])
 
         mergedrecords.append(newrecord)
     return mergedrecords
