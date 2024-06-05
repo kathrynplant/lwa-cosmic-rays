@@ -511,44 +511,6 @@ def inject_simulation(records,pulse_antennas,pulse,ok_vetos_fname,veto_thresh,na
                 data[2500]=512
     return records
 
-
-### Arrival direction fitting
-def toa_plane(ant_coords,theta,phi):
-    #This calculates the arrival times at each antenna of a plane wave moving across the array
-    #The TOAs are returned in number of clock cycles relative to the arrival time at the zero,zero,zero coordinate
-    #theta and phi in degrees, coordinates in meters
-    #theta is the angle between the source direction and zenith. Theta=0 for a zenith source
-    #phi is the azimuth angle of the source
-    c=3e8
-    sample_rate=1.97e8 #MHz
-    phi_rad=(phi*math.pi/180)
-    theta_rad=theta*math.pi/180
-    x,y,z=ant_coords
-    
-    #calculate cartesian unit vector in the direction of the source
-    yhat=math.sin(theta_rad)*math.cos(phi_rad)
-    xhat=math.sin(theta_rad)*math.sin(phi_rad)
-    zhat=math.cos(theta_rad)
-    
-    #project all the antenna coordinates into the source direction
-    dot_product=((xhat*x)+(yhat*y)+(zhat*z))
-    
-    #convert distance to a time offset in number of clock cycles
-    time_diff=(sample_rate/c)*dot_product  
-    return time_diff
-
-def grad_toa_plane(ant_coords,theta,phi):
-    #This is the gradient of toa_plane w.r.t theta and phi
-    c=3e8
-    sample_rate=1.97e8 #MHz
-    phi_rad=(phi*math.pi/180)
-    theta_rad=theta*math.pi/180
-    x,y,z=ant_coords
-
-    dtdtheta=(math.pi/180)*(sample_rate/c)*((y*math.cos(theta_rad)*math.cos(phi_rad))+(x*math.cos(theta_rad)*math.cos(phi_rad))-(z*math.sin(theta_rad)))
-    dtdphi=(math.pi/180)*(sample_rate/c)*((-y*math.sin(theta_rad)*math.sin(phi_rad)) +(x*math.sin(theta_rad)*math.cos(phi_rad)))
-    return np.asarray([dtdtheta,dtdphi]).transpose()
-
 def rank_by_snr(event,arraymapdictionaries,namedict,minimum_ok_rms=25,maximum_ok_rms=45,minimum_ok_kurtosis=-1,maximum_ok_kurtosis=1,Filter='None'):
     # Return a list of antenna names and snrs in order from strongest snr to smallest , in separate rankings for each polarization and for core and distant antennas
     #Event is a list of records (single-packet dictionaries) belonging to the same event
@@ -609,7 +571,433 @@ def rank_by_snr(event,arraymapdictionaries,namedict,minimum_ok_rms=25,maximum_ok
     
     return ranked_core_A_pol,ranked_core_B_pol,ranked_far_A_pol,ranked_far_B_pol
 
+def combine_cuts(cuts):
+    #given a list of selection cuts (each of which are arrays of ones and zeros), combine all of these with boolean ANDs
+    total_cut=cuts[0]
+    for i in range(len(cuts)):
+        total_cut=np.logical_and(total_cut,cuts[i])
+    return total_cut
+
+def combine_cuts_OR(cuts):
+    #given a list of selection cuts (each of which are arrays of ones and zeros), combine all of these with boolean ORs
+    total_cut=cuts[0]
+    for i in range(len(cuts)):
+        total_cut=np.logical_or(total_cut,cuts[i])
+    return total_cut
+
+##############Functions for fitting models to events (to get arrival direction and test spatial distribution) ##########################
+
+### Arrival direction fitting
+def toa_plane(ant_coords,theta,phi):
+    #This calculates the arrival times at each antenna of a plane wave moving across the array
+    #The TOAs are returned in number of clock cycles relative to the arrival time at the zero,zero,zero coordinate
+    #theta and phi in degrees, coordinates in meters
+    #theta is the angle between the source direction and zenith. Theta=0 for a zenith source
+    #phi is the azimuth angle of the source
+    c=3e8
+    sample_rate=1.96e8 #MHz
+    phi_rad=(phi*math.pi/180)
+    theta_rad=theta*math.pi/180
+    x,y,z=ant_coords
+    
+    #calculate cartesian unit vector in the direction of the source
+    yhat=math.sin(theta_rad)*math.cos(phi_rad)
+    xhat=math.sin(theta_rad)*math.sin(phi_rad)
+    zhat=math.cos(theta_rad)
+    
+    #project all the antenna coordinates into the source direction
+    dot_product=((xhat*x)+(yhat*y)+(zhat*z))
+    
+    #convert distance to a time offset in number of clock cycles
+    time_diff=(sample_rate/c)*dot_product  
+    return time_diff
+
+def toa_sphere(ant_coords,theta,phi,r):
+    #This calculates the arrival times at each antenna of a spherical wave moving across the array
+    #The TOAs are returned in number of clock cycles relative to the arrival time at the origin
+    #It is convenient to pick a reference antenna to define the origin and then work with antenna coordinates and arrival times with respect to that antenna
+    #theta and phi in degrees
+    #r and antenna coordinates in meters
+    #theta is the angle between the source direction and zenith. Theta=0 for a zenith source
+    #phi is the azimuth angle of the source
+    
+    c=3e8 #meters per second
+    sample_rate=1.96e8 #MHz
+    phi_rad=(phi*math.pi/180)
+    theta_rad=theta*math.pi/180
+    x,y,z=ant_coords
+    
+    #convert source position to cartesian coordinates 
+    ys=r*math.sin(theta_rad)*math.cos(phi_rad)
+    xs=r*math.sin(theta_rad)*math.sin(phi_rad)
+    zs=r*math.cos(theta_rad)
+    
+    #distance from source to antenna
+    d=np.sqrt(((x-xs)**2)+((y-ys)**2)+((z-zs)**2))
+    
+    #arrival time at antenna
+    t=(1/c)*(d-r)
+    
+    #convert time to a number of clock cycles offset from the arrival time at the origin
+    time_diff=t*sample_rate
+    return time_diff
+
+def simple_direction_fit(anntenna_summary_array,plot=True,toa_func=toa_plane,fitbounds=([0,0],[90,360]),weightbysnr=False):
+    #to run the direction fit code,I need arrays of x,y,z, t which are all with respect to a reference antenna
+    #I will use the first non-flagged antenna as the reference
+    
+    #set up coordinate array, with respect to a reference antenna
+    print('Reference antenna',anntenna_summary_array['antname'][0])
+    t_ref=anntenna_summary_array['tpeak_rel'][0]
+    x_ref=anntenna_summary_array['x'][0]
+    y_ref=anntenna_summary_array['y'][0]
+    z_ref=anntenna_summary_array['z'][0]
+    x=anntenna_summary_array['x'] - x_ref
+    y=anntenna_summary_array['y'] - y_ref
+    z=anntenna_summary_array['z'] - z_ref
+    t=anntenna_summary_array['tpeak_rel'] - t_ref
+    ant_coords=np.zeros((3,len(x)))
+    ant_coords[0,:]=x
+    ant_coords[1,:]=y
+    ant_coords[2,:]=z
+
+    #calculate weights
+    if weightbysnr:
+        w=1/anntenna_summary_array['snr']
+        weights=(w)/np.mean(w)
+    else:
+        weights=np.ones(len(t))
+    
+    popt, pcov = curve_fit(toa_func, ant_coords,t,bounds=fitbounds,sigma=weights)
+    best_model_toas=toa_func(ant_coords,*popt)
+    residual=t-best_model_toas
+    
+    if plot:
+        #plot the results
+        czoom_min=-50
+        czoom_max=50
+        title='Fit with '+str(toa_func)[10:-19]
+        plot_fit(x,y,t,best_model_toas,residual,-40,40,title)
+        
+    return popt,pcov,residual,[x_ref,y_ref,z_ref,t_ref]
+
+def robust_direction_fit(antenna_summary_array,niter,outlier_limit,toa_func=toa_plane,fitbounds=([0,0],[90,360]),plot=True,weightbysnr=False):
+    current_ant_summary_array=antenna_summary_array
+    for n in range(niter):
+        popt,pcov,residual,reference=simple_direction_fit(current_ant_summary_array,plot,toa_func,fitbounds,weightbysnr)
+        rms_residual=np.sqrt(np.mean(np.square(residual)))
+        
+        w=1/current_ant_summary_array['snr']
+        weights=(w)/np.mean(w)
+        weightedresidual=residual/weights
+        weighted_rms_residual=np.sqrt(np.mean(np.square(weightedresidual)))
+        
+        #calculate outliers
+        antpols=np.asarray([current_ant_summary_array['antname'][i]+current_ant_summary_array['pol'][i] for i in range(len(residual))])
+        residual_med=np.median(residual)
+        abs_dev_from_med=np.abs(residual-residual_med)
+        residual_MAD=np.median(abs_dev_from_med)
+        outliers=antpols[abs_dev_from_med>outlier_limit*residual_MAD]
+
+        #The only purpose of flagging at this stage is removing outliers, so the other parameters are set to values that should encompass everything.  In most cases, by the time robust_spatial_fit is being applied, stricter antenna flagging has already occured. 
+        if n<niter-1:
+            current_ant_summary_array=flag_antennas(current_ant_summary_array,1000, 0,-1000,1000,1000,outliers)[0]
+        if plot==True:
+            #print details
+            print('iteration: ',n,' rms residual: ',rms_residual, ' n outliers: ',len(outliers))
+            print('popt: ',popt)
+            print('pcov: ',pcov)
+        
+    return popt,pcov,rms_residual,weighted_rms_residual,current_ant_summary_array,reference
+
+def gauss2d(ant_coords,A,phi,w,r,xo,yo):
+    #calculate the value of a 2D gaussian function at x,y positions listed in ant_coords
+    #A is the amplitude of the Gaussian
+    #phi is the azimuthal angle of the semimajor axis
+    #sigx and sigy control the size scale in each direction
+    #xo, yo are the center positions
+    #phi in degrees
+    #w, xo, and yo must all be in same units as ant_coords
+    #r is related to the aspect ratio. Require r>=1 so that phi will be the angle between the semimajor axis and the north-south axis
+    sigx=w
+    sigy=r*w
+    
+    phi_rad=phi*math.pi/180
+    sinphi=math.sin(phi_rad)
+    cosphi=math.cos(phi_rad)
+
+    a=(1/2)*(((cosphi/sigx)**2)+((sinphi/sigy)**2))
+    b=(-1/2)*(sinphi*cosphi/(sigx**2))+(1/2)*(sinphi*cosphi/(sigy**2))
+    c=(1/2)*(((sinphi/sigx)**2)+((cosphi/sigy)**2))
+    x,y=ant_coords
+    ellipse=(a*((x-xo)**2))+(2*b*((y-yo)*(x-xo)))+(c*(y-yo)**2)
+    return A*np.exp(-1*ellipse)
+
+def robust_spatial_fit(antenna_summary_array,niter,outlier_limit,spatial_func,fitbounds,plot=True):
+    current_ant_summary_array=antenna_summary_array
+    for n in range(niter):
+        #parse coordinates and snrs from summary array
+        ant_coords=np.zeros((2,len(current_ant_summary_array)))
+        ant_coords[0,:]=current_ant_summary_array['x']
+        ant_coords[1,:]=current_ant_summary_array['y']
+        snr=current_ant_summary_array['snr']
+        
+        #do fit
+        popt, pcov = curve_fit(spatial_func, ant_coords,snr,bounds=fitbounds)
+        
+        #calculate residual
+        best_model_snrs=gauss2d(ant_coords,*popt)
+        residual=snr-best_model_snrs
+        rms_residual=np.sqrt(np.mean(np.square(residual)))
+        #calculate outliers
+        antpols=np.asarray([current_ant_summary_array['antname'][i]+current_ant_summary_array['pol'][i] for i in range(len(residual))])
+        residual_med=np.median(residual)
+        abs_dev_from_med=np.abs(residual-residual_med)
+        residual_MAD=np.median(abs_dev_from_med)
+        outliers=antpols[abs_dev_from_med>outlier_limit*residual_MAD]
+        
+        #remove outliers beyond threshold. 
+        #The only purpose of flagging at this stage is removing outliers, so the other parameters are set to values that should encompass everything.  In most cases, by the time robust_spatial_fit is being applied, stricter antenna flagging has already occured. 
+        current_ant_summary_array=flag_antennas(current_ant_summary_array,1000, 0,-1000,1000,1000,outliers)[0]
+        #plot  and report details if if that option is chosen
+        if plot==True:
+            #print details
+            print('iteration: ',n,' rms residual: ',rms_residual, ' n outliers: ',len(outliers))
+            print('popt: ',popt)
+            print('pcov: ',pcov)
+            plot_fit(ant_coords[0,:],ant_coords[1,:],snr,best_model_snrs,residual,np.min(snr),np.max(snr),'Fit with model function: '+'Fit with '+str(spatial_func)[10:-19])
+    return popt,pcov,rms_residual,current_ant_summary_array
+
+
+def za2aspectratio(theta):
+    #predict aspect ratio of gaussian based on zenith angle
+    thet_rad=math.pi*theta/180
+    rho=np.cos(thet_rad)*(1+((np.tan(thet_rad))**2))
+    return rho
+
+
+#######################################################################################################################
+#events summary plotting
+def plothistograms(summary,nbins): 
+    #plot distributions for various columns in the event summary array (each column is a different property and each row is a different event)
+    plt.figure(figsize=(20,20))
+
+    plt.subplot(4,4,1)
+    plt.hist(summary['n_good_antennas'],nbins)
+    plt.xlabel('n_good_antennas')
+    plt.subplot(4,4,2)
+    plt.hist(summary['n_saturated'],nbins)
+    plt.xlabel('n_saturated')
+    plt.subplot(4,4,3)
+    plt.hist(summary['n_kurtosis_bad'],nbins)
+    plt.xlabel('n_kurtosis_bad')
+    plt.subplot(4,4,4)
+    plt.hist(summary['n_power_bad'],nbins)
+    plt.xlabel('n_power_bad')
+
+    plt.subplot(4,4,5)
+    plt.hist(summary['power_ratioA'],nbins)
+    plt.xlabel('power_ratioA')
+    plt.subplot(4,4,6)
+    plt.hist(summary['power_ratioB'],nbins)
+    plt.xlabel('power_ratioB')
+    plt.subplot(4,4,7)
+    plt.hist(summary['max_core_vs_far_ratio'],nbins)
+    plt.xlabel('max_core_vs_far_ratio')
+    plt.subplot(4,4,8)
+    plt.hist(summary['sum_top_5_core_vs_far_ratio'],nbins)
+    plt.xlabel('sum_top_5_core_vs_far_ratio')
+
+    plt.subplot(4,4,9) #these have potential for nans, hence the filtering
+    plt.hist(summary['meansnr_nearby'][summary['meansnr_nearby']>0],nbins)
+    plt.xlabel('meansnr_nearby')
+    plt.subplot(4,4,10)
+    plt.hist(summary['meansnr_nearbyA'][summary['meansnr_nearbyA']>0],nbins)
+    plt.xlabel('meansnr_nearbyA')
+    plt.subplot(4,4,11)
+    plt.hist(summary['meansnr_nearbyB'][summary['meansnr_nearbyB']>0],nbins)
+    plt.xlabel('meansnr_nearbyB')
+    plt.subplot(4,4,12)
+    plt.hist(summary['sum_top_10_core_vs_far_ratio'],nbins)
+    plt.xlabel('sum_top_10_core_vs_far_ratio')
+
+    plt.subplot(4,4,13)
+    plt.hist(summary['meansnr'][summary['meansnr']>0],nbins)
+    plt.xlabel('meansnr')
+    plt.subplot(4,4,14)
+    plt.hist(summary['meansnrA'][summary['meansnrA']>0],nbins)
+    plt.xlabel('meansnrA')
+    plt.subplot(4,4,15)
+    plt.hist(summary['meansnrB'][summary['meansnrB']>0],nbins)
+    plt.xlabel('meansnrB')
+    plt.subplot(4,4,16)
+    #plt.hist(summary['n_veto_detections'],nbins)
+    #plt.xlabel('n_veto_detections')
+    return
+
+def quickanalysis(datafile,index_in_file,configuration):
+    #load data
+    event_records=parsefile(datafile,start_ind=index_in_file,end_ind=704 )
+    event_summary=summarize_signals(event_records,np.asarray(configuration['filter']),namedict,xdict,ydict,zdict)
+    event_summary_flagged=flag_antennas(event_summary,configuration['maximum_ok_power'], configuration['minimum_ok_power'],
+                                        configuration['minimum_ok_kurtosis'],configuration['maximum_ok_kurtosis'],1,
+    configuration['known_bad_antennas'])[0]
+
+    #TOA fit
+    poptt,pcovt,rms_res_t,weightedresidual,array_toa_fit,reference=robust_direction_fit(event_summary_flagged[event_summary_flagged['snr']>5.5],niter=3,outlier_limit=4,plot=False,toa_func=toa_sphere,fitbounds=([0,0,1],[90,360,1e8]),weightbysnr=True)#poptt,pcovt=robust_direction_fit(event_summary_flagged[event_summary_flagged['snr']>6],niter=3,outlier_limit=4,plot=False,toa_func=toa_plane,fitbounds=([0,0],[90,360]))
+
+    rms_weightedresidual=np.sqrt(np.mean(np.square(weightedresidual)))
+    
+    #Gaussian fit -- choose the brighter polarization
+    meansnrA=np.mean(event_summary_flagged[event_summary_flagged['pol']=='A']['snr'])
+    meansnrB=np.mean(event_summary_flagged[event_summary_flagged['pol']=='B']['snr'])
+    if meansnrA>meansnrB:
+        summary_array = event_summary_flagged[np.logical_and(event_summary_flagged['snr']>5.5,event_summary_flagged['pol']=='A')]
+    else:
+        summary_array = event_summary_flagged[np.logical_and(event_summary_flagged['snr']>5.5,event_summary_flagged['pol']=='B')]
+
+    poptg,pcovg,rms_res_g,array_spatial_fit=robust_spatial_fit(summary_array,1,4,gauss2d,([0,0,0,1,-10000,-10000],[50,180,1000,100,10000,10000]),plot=False)
+
+    #summarize results
+    fitstats={}
+    fitstats['arrival_zenith_angle']=poptt[0]
+    fitstats['arrival_zenith_angle_err']=math.sqrt(pcovt[0,0])
+
+    fitstats['arrival_azimuth']=poptt[1]
+    fitstats['arrival_azimuth_err']=pcovt[1,1]
+
+    fitstats['source_distance']=poptt[2]
+    fitstats['source_distance_err']=pcovt[2,2]
+
+    fitstats['toa_fit_rms_res']=rms_res_t
+    fitstats['weightedres']=rms_weightedresidual
+
+    fitstats['gauss_amp']=poptg[0]
+    fitstats['gauss_amp_err']=math.sqrt(pcovg[0,0])
+
+    fitstats['gauss_azimuth']=poptg[1]
+    fitstats['gauss_azimuth_err']=pcovg[1,1]
+
+    fitstats['gauss_lateral_scale']=poptg[2]
+    fitstats['gauss_lateral_scale_err']=pcovg[2,2]
+
+    fitstats['gauss_aspect_ratio']=poptg[3]
+    fitstats['gauss_aspect_ratio_err']=math.sqrt(pcovg[3,3])
+
+    fitstats['gauss_center_x']=poptg[4]
+    fitstats['gauss_center_x_err']=pcovg[4,4]
+
+    fitstats['gauss_center_y']=poptg[5]
+    fitstats['gauss_center_y_err']=pcovg[5,5]
+
+    fitstats['gauss_fit_rms_res']=rms_res_g
+    
+    
+    print('arrival direction azimuth ',round(fitstats['arrival_azimuth'],3),'+-',round(fitstats['arrival_azimuth_err'],3), 'degree')
+    print('Gaussian semimajor axis azimuth ',round(fitstats['gauss_azimuth'],3),'+-',round(fitstats['gauss_azimuth_err'],3), 'degree')
+    print('Arrival direction ZA ', round(fitstats['arrival_zenith_angle'],3),'+-',round(fitstats['arrival_zenith_angle_err'],3), 'degree')
+    print('Gaussian aspect ratio ', round(fitstats['gauss_aspect_ratio'],3),'+-',round(fitstats['gauss_aspect_ratio_err'],3))
+    print('Gaussian fit rms residual ',round(fitstats['gauss_fit_rms_res'],3))
+    print('TOA fit rms residual ', round(fitstats['toa_fit_rms_res'],3), 'rms of residual weighted by snr', fitstats['weightedres'])
+
+    #Do plots
+    #SNR both polarizations
+    plt.figure(figsize=(15,7),dpi=150)
+    plt.subplot(121)
+    plt.title('A')
+    event_scatter_plot(event_summary_flagged,'snr',-105,105,-105,105,'A',annotate=True,markerscale=10,scale='linear',colorlimits='auto')
+    plt.subplot(122)
+    plt.title('B')
+    event_scatter_plot(event_summary_flagged,'snr',-105,105,-105,105,'B',annotate=True,markerscale=10,scale='linear',colorlimits='auto')
+
+    plt.figure(figsize=(15,7),dpi=150)
+    plt.subplot(121)
+    plt.title('A')
+    event_scatter_plot(event_summary_flagged,'snr',-1500,750,-1000,1200,'A',annotate=False,markerscale=10,scale='linear',colorlimits='auto')
+    plt.subplot(122)
+    plt.title('B')
+    event_scatter_plot(event_summary_flagged,'snr',-1500,750,-1000,1200,'B',annotate=False,markerscale=10,scale='linear',colorlimits='auto')
+
+    #waveform plot
+    brightest_antenna=event_summary_flagged[np.argmax(event_summary_flagged['snr'])]
+    pol1=brightest_antenna['pol']
+    if pol1=='A':
+        pol2='B'
+    else:
+        pol2='A'
+    plt.figure(figsize=(15,5))
+    waveform_compare_plot(event_records,brightest_antenna['antname']+pol2,brightest_antenna['antname']+pol1,h)
+
+    #Plot SNR Gauss fit
+    ant_coords=np.zeros((2,len(array_spatial_fit)))
+    ant_coords[0,:]=array_spatial_fit['x']
+    ant_coords[1,:]=array_spatial_fit['y']
+    snr=array_spatial_fit['snr']
+    best_model_snrs=gauss2d(ant_coords,*poptg)
+    residual_g=snr-best_model_snrs
+    plot_fit(array_spatial_fit['x'],array_spatial_fit['y'],snr,best_model_snrs,residual_g,np.min(snr),np.max(snr),'Gaussian fit')
+
+    #Plot Toa fit
+    x=array_toa_fit['x'] - reference[0]
+    y=array_toa_fit['y'] - reference[1]
+    z=array_toa_fit['z'] - reference[2]
+    t=array_toa_fit['tpeak_rel'] -reference[3]
+
+    ant_coords=np.zeros((3,len(x)))
+    ant_coords[0,:]=x
+    ant_coords[1,:]=y
+    ant_coords[2,:]=z
+
+    best_model_toas=toa_sphere(ant_coords,*poptt)
+    residual_t=t-best_model_toas
+    plot_fit(ant_coords[0,:],ant_coords[1,:],t,best_model_toas,residual_t,-100,100,'Wavefront fit')
+
+    return
 ########################## snapshot plotting functions  ##########################################################
+def waveform_compare_plot(event_records,antA,antB,h):
+    #plot filtered voltage timeseries and Hilbert envelope for two signals overlaid, with three levels of zoom around the peak
+    #antA and antB are the full names including polarization of the two antennas to compare. 
+    #They can be any two signals, not necessarily a polarization pair
+    #h is the filter to use
+
+    chosenrecordA=find_antenna(event_records,antA)
+    rawdataA=chosenrecordA['data'].astype(np.single)
+    filteredvoltagesA=signal.convolve(rawdataA,h,mode='valid')
+    analyticA=signal.hilbert(filteredvoltagesA)
+    envelopeA=np.abs(analyticA)
+
+    chosenrecordB=find_antenna(event_records,antB)
+    rawdataB=chosenrecordB['data'].astype(np.single)
+    filteredvoltagesB=signal.convolve(rawdataB,h,mode='valid')
+    analyticB=signal.hilbert(filteredvoltagesB)
+    envelopeB=np.abs(analyticB)
+
+    plt.subplot(131)
+    plt.plot(filteredvoltagesA,'red',alpha=0.4)
+    plt.plot(envelopeA,'red')
+    plt.plot(filteredvoltagesB,'blue',alpha=0.4)
+    plt.plot(envelopeB,'blue')
+
+    plt.subplot(132)
+    plt.plot()
+    xmin=envelopeB.argmax()-100
+    xmax=envelopeB.argmax()+100
+    plt.xlim(xmin,xmax)
+    plt.plot(filteredvoltagesA,'red',alpha=0.4)
+    plt.plot(envelopeA,'red')
+    plt.plot(filteredvoltagesB,'blue',alpha=0.4)
+    plt.plot(envelopeB,'blue')
+
+    plt.subplot(133)
+    xmin=envelopeB.argmax()-20
+    xmax=envelopeB.argmax()+20
+    plt.xlim(xmin,xmax)
+    plt.plot(filteredvoltagesA,'red',alpha=0.4)
+    plt.plot(envelopeA,'red')
+    plt.plot(filteredvoltagesB,'blue',alpha=0.4)
+    plt.plot(envelopeB,'blue')
+    return
+
 
 def plot_timeseries(event,antenna_names,zoom='peak',Filter='None'):
     #Event is a list of records (single-packet dictionaries) belonging to the same event
@@ -653,7 +1041,7 @@ def plot_spectra(event,antenna_names,zoom='peak',Filter='None'):
     #If a requested antenna to plot is not in the list (which happens if that packet has been lost), the missing antenna is skipped
     #The requested antennas are plotted in the order they appear in event, not in the order of the input list
     #Filter can be None or a 1D numpy array of coefficients for a time-domain FIR. If filter is not 'None', the timeseries will be convolved with the provided coefficients.
-    fs=197
+    fs=196
     for record in event:
         s=record['board_id']
         a=record['antenna_id']
@@ -723,18 +1111,26 @@ def plot_power_timeseries(event,antenna_names,zoom='peak',Filter1='None',Filter2
                 plt.xlim(zoom[0],zoom[1])
     return
 
-def event_scatter_plot(single_event_summary,plotcolumn,xmin,xmax,ymin,ymax,pol,annotate=False,markerscale=1,sqrt=False):
+def event_scatter_plot(single_event_summary,plotcolumn,xmin,xmax,ymin,ymax,pol,annotate=False,markerscale=1,scale='linear',colorlimits='auto'):
     single_event_summary_single_pol=single_event_summary[single_event_summary['pol']==pol]
     #plt.figure(figsize=(7,7),dpi=100)
-    if sqrt==False:
+    if scale=='linear':
         coloraxis=single_event_summary_single_pol[plotcolumn]
-    if sqrt==True:
+    if scale=='sqrt':
         coloraxis=np.sqrt(single_event_summary_single_pol[plotcolumn])
+    if scale=='log':
+        coloraxis=np.log10(single_event_summary_single_pol[plotcolumn])
+    if scale=='logsqrt':
+        coloraxis=np.log10(np.sqrt(single_event_summary_single_pol[plotcolumn]))
+        
     plt.scatter(single_event_summary_single_pol['x'],single_event_summary_single_pol['y'],
                 c=coloraxis,s=markerscale*single_event_summary_single_pol[plotcolumn])
     plt.xlim(xmin,xmax)
     plt.ylim(ymin,ymax)
-    plt.clim(0,np.max(coloraxis))
+    if colorlimits=='auto':
+        plt.clim(0,np.max(coloraxis))
+    else:
+        plt.clim(colorlimits[0],colorlimits[1])
     plt.colorbar()
 
     if annotate:
@@ -744,6 +1140,7 @@ def event_scatter_plot(single_event_summary,plotcolumn,xmin,xmax,ymin,ymax,pol,a
             if (x<xmax) and (y<ymax) and (x>xmin) and (y>ymin):
                 plt.text(x,y, single_event_summary_single_pol['antname'][i][3:],fontsize='x-small')
     return
+
 
 def find_antenna(event_records,antname):
     for r in event_records:
@@ -1306,13 +1703,14 @@ def plot_fit(x,y,toa_data,best_model_toas,residual,czoom_min,czoom_max,title):
     plt.axes='equal'
     plt.scatter(x,y,c=toa_data)
     plt.colorbar()
-    plt.title('Observed relative TOAs')
+    plt.title('Measured ')
 
     plt.subplot(232)
     plt.axes='equal'
     plt.scatter(x,y,c=best_model_toas)
     plt.colorbar()
-    plt.title('Best fit model toas')
+    plt.clim(toa_data.min(),toa_data.max())
+    plt.title('Best fit model ')
 
     plt.subplot(233)
     plt.axes='equal'
@@ -1327,7 +1725,7 @@ def plot_fit(x,y,toa_data,best_model_toas,residual,czoom_min,czoom_max,title):
     plt.xlim(-200,200)
     plt.ylim(-200,200)
     plt.clim(czoom_min,czoom_max)
-    plt.title('Observed relative TOAs')
+    plt.title('Measured ')
 
     plt.subplot(235)
     plt.axes='equal'
@@ -1336,7 +1734,7 @@ def plot_fit(x,y,toa_data,best_model_toas,residual,czoom_min,czoom_max,title):
     plt.xlim(-200,200)
     plt.ylim(-200,200)
     plt.clim(czoom_min,czoom_max)
-    plt.title('Best fit model toas')
+    plt.title('Best fit model')
 
     plt.subplot(236)
     plt.axes='equal'
@@ -1352,7 +1750,7 @@ def plot_fit(x,y,toa_data,best_model_toas,residual,czoom_min,czoom_max,title):
 ### NOTE THAT THIS FUNCTION IS FOR DATA FORMAT FROM OLD PACKETIZER I'm leaving it here in case old-format data ever needs to be used in commissioning
 def single_board_snapshot_summary_plots(fname,boardnumber):
     #plot spectra
-    fbins=np.linspace(0,197/2,int(1+4096/2))
+    fbins=np.linspace(0,196/2,int(1+4096/2))
     chanmap=np.loadtxt('channelmap.txt')
     snapshot=np.load(fname)
 
@@ -1372,7 +1770,7 @@ def single_board_snapshot_summary_plots(fname,boardnumber):
         if i%8==0:
             plt.ylabel('power')
 
-    fbins=np.linspace(0,197/2,int(1+4096/2))
+    fbins=np.linspace(0,196/2,int(1+4096/2))
     #isnormal=np.zeros(64)  
 
     #plot histogram
