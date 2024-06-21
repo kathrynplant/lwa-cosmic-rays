@@ -1,15 +1,15 @@
 #Configuration file to list parameters for preliminary_cuts.py to read.
 ######## File path parameters ##################
 #path to directory with data files. Note that the input data file is still a command line argument, for ease of use with gnu parallel.
-datadir: '/data0/cosmic-ray-data/2023August9/'
+datadir: '/lustre/kplant/newdata/'
 #Directory to save data products
-outdir: '/data0/cosmic-ray-data/code-testing/'
+outdir: '/lustre/kplant/newdata-dataproducts/'
 #index in input file at which to stop loading data (this is useful if test-running the cuts on a small amount of data)
-stop_index: 70400 #7040000 is the whole file
+stop_index: 7040000 #7040000 is the whole file
 
 ######## Parameters for antenna-based cuts ######
 #name of csv file with antenna names and coordinates: Columns must have headings 'antname', 'x', 'y', 'elevation'
-array_map_filename: '/home/ubuntu/kp/lwa-cosmic-rays/array-map-5-22-2023.csv'
+array_map_filename: '/home/kplant/lwa-cosmic-rays/array-map-5-22-2023.csv'
 
 #Coefficients of FIR filter to apply to voltage timeseries before computing power. This should match what's applied in firmware (unless the purpose is to test alternate filters)
 
@@ -44,14 +44,11 @@ minimum_ok_power: 225
 minimum_ok_kurtosis: -1
 #maximum acceptable excess kurtosis
 maximum_ok_kurtosis: 1
-######## Parameters for event-based cuts ###### 
-#core vs distant ratio
-minmaxstrengthratio: 2.5
-#core vs distant ratio
-mintop5ratio: 2.5 
-#cut for ratio of power before and after event
-min_power_ratio: 0.5 
-max_power_ratio: 1.7 
+#maximum acceptable number of saturated samples in the timeseries
+max_saturated_samples: 10
+#List of antennas to be flagged by name (list need not include antennas that will be caught by the other criteria)
+known_bad_antennas: ['LWA-288A','LWA-288B','LWA-280A','LWA-280B','LWA-147A','LWA-147B','LWA-130A','LWA-130B']
+
 ######## Options to inject simulated pulses to test the cuts ####
 #If setting simulation=True, then uncomment the other options
 simulation: False
