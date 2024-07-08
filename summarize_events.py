@@ -111,7 +111,7 @@ def main():
         if len(antenna_summary_flagged):
             power_ratioA,power_ratioB,max_core_vs_far_ratio,sum_top_5_core_vs_far_ratio,sum_top_10_core_vs_far_ratio,meansnr_nearby,meansnr_nearbyA,meansnr_nearbyB,meansnr,meansnrA,meansnrB=summarize_event(antenna_summary_flagged)
         else:
-            power_ratioA,power_ratioB,max_core_vs_far_ratio,sum_top_5_core_vs_far_ratio,sum_top_10_core_vs_far_ratio,meansnr_nearby,meansnr_nearbyA,meansnr_nearbyB,meansnr,meansnrA,meansnrB=0,0,0,0,0,0,0,0,0,0,0,0
+            power_ratioA,power_ratioB,max_core_vs_far_ratio,sum_top_5_core_vs_far_ratio,sum_top_10_core_vs_far_ratio,meansnr_nearby,meansnr_nearbyA,meansnr_nearbyB,meansnr,meansnrA,meansnrB=0,0,0,0,0,0,0,0,0,0,0
         if (event_indices==[n for n in range(np.min(event_indices),np.min(event_indices)+704)]):
             index_in_file=(event_indices[0])
         else:

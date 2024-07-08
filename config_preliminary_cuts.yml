@@ -3,7 +3,7 @@
 #path to directory with data files. Note that the input data file is still a command line argument, for ease of use with gnu parallel.
 datadir: '/lustre/kplant/newdata/'
 #Directory to save data products
-outdir: '/lustre/kplant/newdata-dataproducts/'
+outdir: '/lustre/kplant/new-dataproducts/'
 #index in input file at which to stop loading data (this is useful if test-running the cuts on a small amount of data)
 stop_index: 7040000 #7040000 is the whole file
 
