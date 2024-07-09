@@ -1,0 +1,90 @@
+#Configuration file to list parameters for preliminary_cuts.py to read.
+######## File path parameters ##################
+#path to directory with data files. Note that the input data file is still a command line argument, for ease of use with gnu parallel.
+datadir: '/lustre/kplant/newdata/'
+#Directory to save data products
+outdir: '/lustre/kplant/new-dataproducts/'
+#index in input file at which to stop loading data (this is useful if test-running the cuts on a small amount of data)
+stop_index: 7040000 #7040000 is the whole file
+
+######## Parameters for antenna-based cuts ######
+#name of csv file with antenna names and coordinates: Columns must have headings 'antname', 'x', 'y', 'elevation'
+array_map_filename: '/home/kplant/lwa-cosmic-rays/array-map-5-22-2023.csv'
+
+#sample rate in MHz
+fs: 196
+
+#Coefficients of FIR filter to apply to voltage timeseries before computing power. This should match what's applied in firmware (unless the purpose is to test alternate filters)
+
+filter: [0.000049291111379545783611425685544205066,
+    0.012255497574972781804625299173494568095,
+    0.085289616177628382875930412865272955969,
+    -0.063136263203890236050952466939634177834,
+    -0.021489412960359111082198069198057055473,
+    -0.067555957743183181474222465112688951194,
+    -0.017706118779731286339007567676162580028,
+    0.080882151494431037130894424080906901509,
+    -0.014358148251631907416081546102759602945,
+    0.093835202832724035060252276707615237683,
+    -0.280577771800571862392814637132687494159,
+    -0.129748808680352711864003367736586369574,
+    0.501393724111570460166831253445707261562,
+    -0.129748808680352711864003367736586369574,
+    -0.280577771800571862392814637132687494159,
+    0.093835202832724035060252276707615237683,
+    -0.014358148251631907416081546102759602945,
+    0.080882151494431037130894424080906901509,
+    -0.017706118779731286339007567676162580028,
+    -0.067555957743183181474222465112688951194,
+    -0.021489412960359111082198069198057055473,
+    -0.063136263203890236050952466939634177834,
+    0.085289616177628382875930412865272955969,
+    0.012255497574972781804625299173494568095,
+    0.000049291111379545783611425685544205066]
+maximum_ok_power: 2500
+minimum_ok_power: 225
+#minimum acceptable excess kurtosis
+minimum_ok_kurtosis: -1
+#maximum acceptable excess kurtosis
+maximum_ok_kurtosis: 1
+#maximum acceptable number of saturated samples in the timeseries
+max_saturated_samples: 10
+#List of antennas to be flagged by name (list need not include antennas that will be caught by the other criteria)
+known_bad_antennas: ['LWA-288A','LWA-288B','LWA-280A','LWA-280B','LWA-147A','LWA-147B','LWA-130A','LWA-130B']
+
+######## Options to inject simulated pulses to test the cuts ####
+#If setting simulation=True, then uncomment the other options
+simulation: False
+#pulse: 0
+#pulse_antennas: 
+#veto_thresh: 90000 
+#ok_vetos_fname: '/home/ubuntu/kp/ok_vetos-2023-7-4.npy'
+
+#################### Parameters for first stage of cuts on events ###################
+#maximum number of antennas that can fail the antenna-based kurtosis cut
+max_ants_bad_kurtosis: 10
+#maximum number of antennas that can fail the antenna-based power cut
+max_ants_bad_power: 200
+#maximum number of antennas that can fail the antenna-based saturation cut
+max_ants_saturated: 10
+#minimum and maximum median power ratio
+min_pr: 0.8 
+max_pr: 1.1
+
+################## Parameters for saving first-stage selection ###################################
+#output files will be saved in the directory specified by outdir. A file name prefix can be specified here.
+fileprefix: 'first_cut'
+
+#After applying the cuts, the results can be split into multiple tables, which is more convenient for parallel processing during the toa and gaussian fits.
+nfiles: 20
+
+##########parameters for model fits############################
+# Only antennas with snr >minsnr will be included in the model fits
+minsnr: 5.5
+#The time of arrival model fit will be repeated for niter_toa iterations, with outliers flagged after each iteration.
+niter_toa: 3
+#The Gaussian model fit will be repeated for niter_gauss iterations, with outliders flagged after each iteration. Setting it to 1 iteration means that no flagging will be performed.
+niter_gauss: 1
+#outliers with residuals more than maxdev median absolute deviations from the median residual will be flagged on each flagging iteration
+maxdev: 4
+
