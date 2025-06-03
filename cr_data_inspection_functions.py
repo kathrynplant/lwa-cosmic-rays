@@ -246,8 +246,8 @@ def summarize_signals(event,Filter,namedict,xdict,ydict,zdict,details=True):
         hilbert_peak=envelope[index_hilbert_peak]
         snr=hilbert_peak/np.sqrt(mean_power)
         
-        if index_hilbert_peak<3929:
-            mean_power_after = np.mean(powertimeseries[index_hilbert_peak+25:index_hilbert_peak+75])
+        if index_hilbert_peak<3904:
+            mean_power_after = np.mean(powertimeseries[index_hilbert_peak+50:index_hilbert_peak+100])
         else:
             mean_power_after = 0
         powerratio = mean_power_after/mean_power
@@ -701,7 +701,7 @@ def robust_direction_fit(antenna_summary_array,niter,outlier_limit,toa_func=toa_
 
         #The only purpose of flagging at this stage is removing outliers, so the other parameters are set to values that should encompass everything.  In most cases, by the time robust_spatial_fit is being applied, stricter antenna flagging has already occured. 
         if n<niter-1:
-            current_ant_summary_array=flag_antennas(current_ant_summary_array,1000, 0,-1000,1000,1000,outliers)[0]
+            current_ant_summary_array=flag_antennas(current_ant_summary_array,1e9, 0,-1000,1000,1000,outliers)[0]
         if plot==True:
             #print details
             print('iteration: ',n,' rms residual: ',rms_residual, ' n outliers: ',len(outliers))
@@ -835,10 +835,14 @@ def plothistograms(summary,nbins):
     #plt.xlabel('n_veto_detections')
     return
 
-def quickanalysis(datafile,index_in_file,configuration):
+def quickanalysis(datafile,index_in_file,configuration,namedict,arraymapdictionaries):
+    xdict=arraymapdictionaries[0]
+    ydict=arraymapdictionaries[1]
+    zdict=arraymapdictionaries[2]
+    h=np.asarray(configuration['filter'])
     #load data
     event_records=parsefile(datafile,start_ind=index_in_file,end_ind=704 )
-    event_summary=summarize_signals(event_records,np.asarray(configuration['filter']),namedict,xdict,ydict,zdict)
+    event_summary=summarize_signals(event_records,h,namedict,xdict,ydict,zdict)
     event_summary_flagged=flag_antennas(event_summary,configuration['maximum_ok_power'], configuration['minimum_ok_power'],
                                         configuration['minimum_ok_kurtosis'],configuration['maximum_ok_kurtosis'],1,
     configuration['known_bad_antennas'])[0]
@@ -1626,9 +1630,10 @@ def plot_all_histograms(event):
                 plt.ylabel('Counts')
     return
 
-def plot_select_antennas(event,antennas):
+def plot_select_antennas(event,antennas,Filter=False):
     #Event is a list of records (single-packet dictionaries) belonging to the same event
-    #antennas is a list where each element in the list is a tuple of format (s,a) where s is the index of the snap board and a is the index of the antenna to plot
+    #antennas is a list where each element in the list is a string with antenna name including polarization, e.g. 'LWA-353B'
+    #If Filter is specified as a 1D array of coefficients, the timeseries will be convolved with that filter before plotting
     #If a requested antenna to plot is not in the list (which happens if that packet has been lost), the missing antenna is skipped
     #The requested antennas are plotted in the order they appear in event, not in the order of the input list
     for record in event:
@@ -1637,6 +1642,8 @@ def plot_select_antennas(event,antennas):
         antname=mapping.snap2_to_antpol(s,a)
         if antname in antennas:
             timeseries=record['data']
+            if type(Filter)==np.ndarray:
+                timeseries=signal.convolve(timeseries,Filter,mode='valid')
             plt.figure(figsize=(20,5))
             plt.suptitle(antname + ' snap '+ str(s) + ' antenna ' + str(a))
             
