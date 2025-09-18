@@ -87,4 +87,4 @@ niter_toa: 3
 niter_gauss: 1
 #outliers with residuals more than maxdev median absolute deviations from the median residual will be flagged on each flagging iteration
 maxdev: 4
-
+delay_caltable:  '/home/kplant/correlator_antenna_delay_20241119.npy'

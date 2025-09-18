@@ -43,7 +43,7 @@ def main():
     known_bad_antennas=configuration['known_bad_antennas']
     
     #parameters for model fits
-
+    delaycaltable = np.load(configuration['delay_caltable']) #numpy array file with delays to use for calibrating the arrival times before the direction fits
     minsnr= configuration['minsnr']# Only antennas with snr >minsnr will be included in the model fits
     niter_toa= configuration['niter_toa']#The time of arrival model fit will be repeated for niter_toa iterations, with outliers flagged after each iteration.
     niter_gauss= configuration['niter_gauss']#The Gaussian model fit will be repeated for niter_gauss iterations, with outliders flagged after each iteration. Setting it to 1 iteration means that no flagging will be performed.
@@ -103,9 +103,10 @@ def main():
                                             configuration['minimum_ok_kurtosis'],configuration['maximum_ok_kurtosis'],1,
         configuration['known_bad_antennas'])[0]
 
+        #Apply delay calibration and select antennas above SNR threshold
+        arrayforfit=apply_delay_cal(event_summary_flagged, delaycaltable,minsnr,signflip=True)
         #TOA fit
-        try:
-                poptt,pcovt,rms_res_t,weightedresidual,array_toa_fit,reference=robust_direction_fit(event_summary_flagged[event_summary_flagged['snr']>minsnr],niter=3,outlier_limit=maxdev,plot=False,toa_func=toa_sphere,fitbounds=([0,0,1],[90,360,1e8]),weightbysnr=True)
+        try:                poptt,pcovt,rms_res_t,weightedresidual,array_toa_fit,reference=robust_direction_fit(arrayforfit,niter=niter_toa,outlier_limit=maxdev,plot=False,toa_func=toa_sphere,fitbounds=([0,0,0],[90,360,1e6]),weightbysnr=False,usecolumn='tpeak_calibrated')
         except RuntimeError:
             poptt=np.zeros(3)
             pcovt=np.zeros((3,3))
@@ -123,7 +124,7 @@ def main():
         else:
             summary_array = event_summary_flagged[np.logical_and(event_summary_flagged['snr']>minsnr,event_summary_flagged['pol']=='B')]
         try:
-            poptg,pcovg,rms_res_g,array_spatial_fit=robust_spatial_fit(summary_array,1,maxdev,gauss2d,([0,0,0,1,-10000,-10000],[50,180,1000,100,10000,10000]),plot=False)
+            poptg,pcovg,rms_res_g,array_spatial_fit=robust_spatial_fit(summary_array,niter_gauss,maxdev,gauss2d,([0,0,0,1,-10000,-10000],[50,180,1000,100,10000,10000]),plot=False)
         except RuntimeError:
             poptg=np.zeros(6)
             pcovg=np.zeros((6,6))

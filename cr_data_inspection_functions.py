@@ -3,6 +3,7 @@ import os
 import pandas as pd
 import time
 import numpy as np
+import numpy.lib.recfunctions as rfn
 import struct
 import matplotlib.pyplot as plt
 import math
@@ -10,6 +11,8 @@ from scipy.optimize import curve_fit
 import scipy.stats as st
 from scipy import signal
 from lwa_antpos import mapping
+import h5py as h5
+
 
 ### functions for building fast way to lookup antenna names
 #@profile
@@ -179,6 +182,56 @@ def distinguishevents(records,maxoffset):
             maxtimestamp=currenteventtimestamp+maxoffset
     events.append(currentevent_indices)
     return events
+
+
+def apply_delay_cal(event, caltable,minsnr,signflip=True,fs=196):
+    #This function returns an event summary array that has had a delay calibration applied to antennas of the dominant polarization, generating two new columns
+    #The original arrival time columns are not changed.
+    #The new column 'delay_cal' contains the delays assigned to each antenna from the input calibration array.
+    #The new column 'tpeak_calibrated' contains the calibrated event arrival times. tpeak_calibrated=tpeak_rel - delay_cal
+    #If signflip=True, the delays in the input calibration array are multiplied by -1, which is needed because relative delays between antennas can be defined with two different conventions
+    #fs is the clock rate in MHz
+    #The output event summary array will only contain rows for antennas that meet a minimum snr cutoff and have delay solutions present in the calibration array.
+    #caltable is a numpy array with the calibration solutions in microseconds where caltable[0,:] are the XX delays and caltable[1,:] are the YY, and entries are ordered by the antenna's correlator number.
+    #event is the input event summary array
+    #minsnr is the minimum signal to noise ratio to use
+
+    #select the antennas with an snr above the cutoff snr
+    bright=event[event['snr']>minsnr]
+    brightpolA=bright[bright['pol']=='A']
+    brightpolB=bright[bright['pol']=='B']
+
+    #determine which polarization is stronger
+    if len(brightpolA)>len(brightpolB):
+        output=brightpolA
+        strongpol='A'
+    else:
+        output=brightpolB
+        strongpol='B'
+
+    #XX is A pol, YY is B pol
+    if strongpol=='A':
+        corrdelays=caltable[0,:]
+    if strongpol=='B':
+        corrdelays=caltable[1,:]
+
+    #make a list of the correlator delays in the order that the antennas appear in my event data array
+    if signflip==True:
+        sign=-1
+    else:
+        sign=1
+    corrdelays_reordered=np.asarray([corrdelays[mapping.antname_to_correlator(a)] for a in output['antname']])
+    corrdelays_sign=sign*fs*corrdelays_reordered #change to the sign convention that I use for delays and convert to clock cycles
+
+    #Add the delays and a delay-calibrated column to the event data array
+    t_corrected=output['tpeak_rel']-corrdelays_sign
+    output=rfn.append_fields(output,'delay_cal',data=corrdelays_sign,dtypes=np.float64)
+    output=rfn.append_fields(output,'tpeak_calibrated',data=t_corrected,dtypes=np.float64)
+
+    #keep only the ones that have a delay solution
+    output=np.ma.getdata(output[output['tpeak_calibrated']>=0])
+    return output
+
 
 #@profile
 def summarize_signals(event,Filter,namedict,xdict,ydict,zdict,details=True):
@@ -642,20 +695,20 @@ def toa_sphere(ant_coords,theta,phi,r):
     time_diff=t*sample_rate
     return time_diff
 
-def simple_direction_fit(anntenna_summary_array,plot=True,toa_func=toa_plane,fitbounds=([0,0],[90,360]),weightbysnr=False):
+def simple_direction_fit(anntenna_summary_array,plot=True,toa_func=toa_plane,fitbounds=([0,0],[90,360]),weightbysnr=False,usecolumn='tpeak_rel'):
     #to run the direction fit code,I need arrays of x,y,z, t which are all with respect to a reference antenna
     #I will use the first non-flagged antenna as the reference
     
     #set up coordinate array, with respect to a reference antenna
     print('Reference antenna',anntenna_summary_array['antname'][0])
-    t_ref=anntenna_summary_array['tpeak_rel'][0]
+    t_ref=anntenna_summary_array[usecolumn][0]
     x_ref=anntenna_summary_array['x'][0]
     y_ref=anntenna_summary_array['y'][0]
     z_ref=anntenna_summary_array['z'][0]
     x=anntenna_summary_array['x'] - x_ref
     y=anntenna_summary_array['y'] - y_ref
     z=anntenna_summary_array['z'] - z_ref
-    t=anntenna_summary_array['tpeak_rel'] - t_ref
+    t=anntenna_summary_array[usecolumn] - t_ref
     ant_coords=np.zeros((3,len(x)))
     ant_coords[0,:]=x
     ant_coords[1,:]=y
@@ -681,10 +734,12 @@ def simple_direction_fit(anntenna_summary_array,plot=True,toa_func=toa_plane,fit
         
     return popt,pcov,residual,[x_ref,y_ref,z_ref,t_ref]
 
-def robust_direction_fit(antenna_summary_array,niter,outlier_limit,toa_func=toa_plane,fitbounds=([0,0],[90,360]),plot=True,weightbysnr=False):
+
+def robust_direction_fit(antenna_summary_array,niter,outlier_limit,toa_func=toa_plane,fitbounds=([0,0],[90,360]),plot=True,weightbysnr=False,usecolumn='tpeak_rel'):
     current_ant_summary_array=antenna_summary_array
     for n in range(niter):
-        popt,pcov,residual,reference=simple_direction_fit(current_ant_summary_array,plot,toa_func,fitbounds,weightbysnr)
+        #do fit
+        popt,pcov,residual,reference=simple_direction_fit(current_ant_summary_array,plot,toa_func,fitbounds,weightbysnr,usecolumn=usecolumn)
         rms_residual=np.sqrt(np.mean(np.square(residual)))
         
         w=1/current_ant_summary_array['snr']
@@ -698,16 +753,30 @@ def robust_direction_fit(antenna_summary_array,niter,outlier_limit,toa_func=toa_
         abs_dev_from_med=np.abs(residual-residual_med)
         residual_MAD=np.median(abs_dev_from_med)
         outliers=antpols[abs_dev_from_med>outlier_limit*residual_MAD]
-
-        #The only purpose of flagging at this stage is removing outliers, so the other parameters are set to values that should encompass everything.  In most cases, by the time robust_spatial_fit is being applied, stricter antenna flagging has already occured. 
-        if n<niter-1:
-            current_ant_summary_array=flag_antennas(current_ant_summary_array,1e9, 0,-1000,1000,1000,outliers)[0]
+        
+        #do plots, if desired
         if plot==True:
             #print details
             print('iteration: ',n,' rms residual: ',rms_residual, ' n outliers: ',len(outliers))
             print('popt: ',popt)
             print('pcov: ',pcov)
+            plt.figure(figsize=(15,5))
+            plt.subplot(131)
+            plt.hist(residual)
+            plt.xlabel('Residual')
+            plt.subplot(132)
+            plt.plot(current_ant_summary_array['snr'],residual,',')
+            plt.ylabel('Residual [clock cycles]')
+            plt.xlabel('SNR')
+            plt.subplot(133)
+            plt.plot(np.sqrt(current_ant_summary_array['distance']),residual,',')
+            plt.ylabel('Residual [clock cycles]')
+            plt.xlabel('Distance [m]')
         
+        #flag for the next iteration
+        #The only purpose of flagging at this stage is removing outliers, so the other parameters are set to values that should encompass everything.  In most cases, by the time robust_spatial_fit is being applied, stricter antenna flagging has already occured. 
+        if n<niter-1:
+            current_ant_summary_array=flag_antennas(current_ant_summary_array,1e9, 0,-1000,1000,1000,outliers)[0]
     return popt,pcov,rms_residual,weighted_rms_residual,current_ant_summary_array,reference
 
 def gauss2d(ant_coords,A,phi,w,r,xo,yo):
@@ -774,6 +843,249 @@ def za2aspectratio(theta):
     thet_rad=math.pi*theta/180
     rho=np.cos(thet_rad)*(1+((np.tan(thet_rad))**2))
     return rho
+
+######################################### Functions for polarization analysis ######################################
+def vxB(azimuth,zenithangle,B,verbose=False):
+    #computes expected vxB polarization for a cosmic ray arriving from a given azimuth and zenith angle
+    #azimuth is the azimuth in degrees, North is zero and 360, positive values East of North
+    #zenithangle is the zenith angle in degrees
+    #B is a three-element 1D array representing the local magnetic field vector, in cartesian coordinates [NS,EW,Vertical]
+    #returns a vector normalized to magnitude 1. The elements of the vector are [NS,EW, Vertical].
+    #Since the output is normalized, the units of B don't matter
+    
+    #Velocity vector in cartesian coordinates. The -1 is because it comes FROM the given direction
+    deg2rad=(math.pi)/180
+    Vns=-1*(math.sin(zenithangle*deg2rad))*(math.cos(azimuth*deg2rad))
+    Vew=-1*(math.sin(zenithangle*deg2rad))*(math.sin(azimuth*deg2rad))
+    Vvert=-1*math.cos(zenithangle*deg2rad) 
+    
+    #Expand B vector
+    Bns=B[0]
+    Bew=B[1]
+    Bvert=B[2]
+
+    #Cross product
+    Pns=(Bvert*Vew)-(Bew*Vvert)
+    Pew=-((Vns*Bvert)-(Bns*Vvert))
+    Pvert=(Vns*Bew)-(Bns*Vew)
+    P=np.asarray([Pns,Pew,Pvert])
+    
+    if verbose:
+        print('V ',Vns,Vew,Vvert)
+        print('B ', Bns,Bew,Bvert)
+        print('P ',P)
+
+    #Normalize
+    Pmag=math.sqrt(np.sum(np.square(P)))
+    if Pmag<1e-16:  #don't divide by the magnitude if it's zero to with numerical error
+        return np.asarray([0.,0.,0.])
+    else: 
+        return P/Pmag
+    
+    
+def getpolarization(event_summary_flagged,event_records,Filter, plot=False,minsnr=5.5):
+    #finds the polarization fraction for every polarization pair that is not flagged in either polarization and has a snr>5.5 in the polarization in which the event as a whole is stronger
+    
+    
+    #separate the event summary array into one array for each polarization
+    polA=event_summary_flagged[event_summary_flagged['pol']=='A']
+    polB=event_summary_flagged[event_summary_flagged['pol']=='B']
+
+    #identify the dominant polarization as the one with more antennas above the snr threshold
+    if np.sum(polA['snr']>minsnr)>np.sum(polB['snr']>minsnr):
+        primarypol='A'
+        weakerpol='B'
+        primarypolarray=polA
+        weakerpolarray=polB
+    else:
+        primarypol='B'
+        weakerpol='A'
+        primarypolarray=polB
+        weakerpolarray=polA
+
+
+    #which antennas are not flagged in either pol, and are detected above threshold in the stronger pol
+    antcut=np.zeros(len(primarypolarray),dtype=bool)
+    for i,a in enumerate(primarypolarray['antname']):
+        if a in weakerpolarray['antname']:
+            antcut[i]=1
+    totalcut=np.logical_and(antcut,primarypolarray['snr']>5.5)
+    antennas_to_use=primarypolarray[totalcut]
+
+    simpleratios=np.zeros(len(antennas_to_use))
+    fractionsoftotalA=np.zeros(len(antennas_to_use))
+    fractionsoftotalB=np.zeros(len(antennas_to_use))
+    for i,a in enumerate(antennas_to_use['antname']):
+        antA=a+'A'
+        antB=a+'B'
+
+        chosenrecordA=find_antenna(event_records,antA)
+        rawdataA=chosenrecordA['data'].astype(np.single)
+        filteredvoltagesA=signal.convolve(rawdataA,Filter,mode='valid')
+        analyticA=signal.hilbert(filteredvoltagesA)
+        envelopeA=np.abs(analyticA)
+
+        chosenrecordB=find_antenna(event_records,antB)
+        rawdataB=chosenrecordB['data'].astype(np.single)
+        filteredvoltagesB=signal.convolve(rawdataB,Filter,mode='valid')
+        analyticB=signal.hilbert(filteredvoltagesB)
+        envelopeB=np.abs(analyticB)
+
+        peakA=np.max(envelopeA)
+        peakB=np.max(envelopeB)
+        tA=np.argmax(envelopeA)
+        tB=np.argmax(envelopeB)
+        valueA_at_tB=envelopeA[tB]
+        valueB_at_tA=envelopeB[tA]
+
+        if primarypol=='A':
+            simpleratios[i]=peakA/valueB_at_tA
+            fractionsoftotalA[i]=peakA/(peakA+valueB_at_tA)
+            fractionsoftotalB[i]=valueB_at_tA/(peakA+valueB_at_tA)
+        elif primarypol=='B':
+            simpleratios[i]=valueA_at_tB/peakB
+            fractionsoftotalA[i]= valueA_at_tB/(valueA_at_tB+peakB)
+            fractionsoftotalB[i]= peakB/(valueA_at_tB+peakB)
+
+    #Do plots:
+    if plot==True:
+        plt.figure(figsize=(15,5))
+        plt.subplot(131)
+        plt.hist(fractionsoftotalA)
+
+        plt.subplot(132)
+        plt.hist(fractionsoftotalB)
+
+        plt.subplot(133)
+        plt.hist(simpleratios)
+
+        plt.figure(figsize=(10,10))
+        plt.scatter(antennas_to_use['x'],antennas_to_use['y'],c=fractionsoftotalB)
+        plt.colorbar()
+
+    return fractionsoftotalA,fractionsoftotalB,simpleratios
+
+def beam2cartesian(etheta,ephi,theta,phi):
+    #convert etheta, ephi as defined in Nivedita's beam model to cartesian coordinates with the following components:
+    # North-South component positive towards north
+    # East-West component positive towards East
+    # Vertical component positive UP
+    #returns coordinate vector as an array [NS, EW, V]
+    #etheta and ephi are the magnitudes of these components of the beam model
+    #theta and phi are the angles in degrees describing the line of sight direction
+    #theta is the zenith angle
+    #phi is azimuth with due East as zero, increasing towards north (due north is 90 degrees)
+    
+    #convert inputs
+    deg2rad=(math.pi)/180
+    cosphi=math.cos(phi*deg2rad)
+    sinphi=math.sin(phi*deg2rad)
+    costhet=math.cos(theta*deg2rad)
+    sinthet=math.sin(theta*deg2rad)
+    
+    #cartesian components of ephi
+    ephiN=ephi*cosphi
+    ephiE=-1*ephi*sinphi
+    ephiV=0
+    
+    #cartesian components of etheta
+    #ethetN=-1*etheta*sinthet*sinphi
+    #ethetE=-1*etheta*sinthet*cosphi
+    #ethetV=etheta*costhet
+    ethetN=etheta*costhet*sinphi
+    ethetE=etheta*costhet*cosphi
+    ethetV=-1*etheta*sinthet
+    
+    #total
+    NS=ephiN+ethetN
+    EW=ephiE+ethetE
+    V=ephiV+ethetV
+    return np.asarray([NS,EW,V])
+
+def LWAPolarizationResponse(zenithangle, azimuth,P,beamfile):
+        #Compute polarization response to a linearly polarized signal
+        #zenithangle and azimuth are the arrival direction in degrees
+        #Azimuth is zero North and positive east of North
+        # P is the direction of polarization of the incident emission, expressed as a 3 component vector [NS, EW, Vertical]
+        #beamfile is the path to the beam model
+        
+        #load the beam model
+        hf = h5.File(beamfile,'r')    
+        #convert my convention I use in the coordinate reconstruction to Nivedita's definitionof theta and phi in Nivedita's beam model
+        theta = int(round(zenithangle,0))
+        phi=90-azimuth 
+        if phi<0:
+            phi=360+phi
+        phi=int(round(phi,0))
+        
+        if theta==90:
+            theta=89  #set to nearest valid value
+
+        # average the beam over 30-80 MHz
+        f1=30
+        f2=80
+        
+        Xephi=np.mean(hf["X_pol_Efields/ephi"][:][f1-10:f2-10,theta,phi])
+        Xetheta=np.mean(hf["X_pol_Efields/etheta"][:][f1-10:f2-10,theta,phi])
+        Yephi=np.mean(hf["Y_pol_Efields/ephi"][:][f1-10:f2-10,theta,phi])
+        Yetheta=np.mean(hf["Y_pol_Efields/etheta"][:][f1-10:f2-10,theta,phi])
+        
+        #convert to cartesian coordinates
+        Xbeam=beam2cartesian(Xetheta,Xephi,theta,phi,)
+        Ybeam=beam2cartesian(Yetheta,Yephi,theta,phi,)
+        #print('Xbeam: ',Xbeam)
+        #print('Ybeam:', Ybeam)
+        
+        NSpredict=np.abs(np.sum(np.multiply(Ybeam,P)))
+        EWpredict=np.abs(np.sum(np.multiply(Xbeam,P)))
+        NSfrac_predicted_withbeam=NSpredict/(NSpredict+EWpredict)
+        
+        return NSfrac_predicted_withbeam
+    
+def do_pol_analysis(datafile,indexinfile,Bfield=np.asarray([22347.1,4773.1,-42034.1]),beamfile=False):
+    #TODO: add beamfile to configuration and make configuration one of the arguments
+    
+    #load the data, create per-antenna summary info, flag antennas
+    event_records=parsefile(datafile,start_ind=indexinfile,end_ind=704 )
+    event_summary=summarize_signals(event_records,np.asarray(configuration['filter']),namedict,xdict,ydict,zdict)
+    event_summary_flagged=flag_antennas(event_summary,configuration['maximum_ok_power'], configuration['minimum_ok_power'],
+                                            configuration['minimum_ok_kurtosis'],configuration['maximum_ok_kurtosis'],1,configuration['known_bad_antennas'])[0]
+
+    #Compute the observed polarization fraction in NS dipole
+    fractionsoftotalA,fractionsoftotalB,simpleratios=getpolarization(event_summary_flagged,event_records,plot=True)
+    
+    #Apply delays and perform a robust direction fit
+    minsnr=configuration['minsnr']
+    caltable=np.load('/home/kplant/correlator_antenna_delay_20241119.npy')
+    arrayforfit=apply_delay_cal(event_summary_flagged, caltable,minsnr,signflip=True)
+    popt,pcov,rms_residual,weighted_rms_residual,current_ant_summary_array,reference=robust_direction_fit(arrayforfit,3,4,toa_func=toa_sphere,fitbounds=([0,0,0],[90,360,1e6]),plot=False,weightbysnr=False,usecolumn='tpeak_calibrated')
+    azimuth=popt[1]
+    zenithangle=popt[0]
+    print('Zenith angle: ',zenithangle)
+    print('Azimuth: ',azimuth)
+    
+    #plot the fit results
+    timing_fit_results_plots(popt,pcov,rms_residual,weighted_rms_residual,current_ant_summary_array,reference,clk2ns)
+    
+    #compute the direction of the predicted polarization vector
+    P=vxB(azimuth,zenithangle,Bfield,verbose=True)
+    print('Expected polarization: ',P)
+    
+    #Compute the predicted fraction in the NS dipole, without accounting for the antenna beam
+    NSfrac_predicted_nobeam = P[0]/(np.abs(P[0])+np.abs(P[1]))
+    NSfrac_observed = np.mean(fractionsoftotalA)
+    NSfrac_observed_err = np.std(fractionsoftotalA)/np.sqrt(len(fractionsoftotalA))
+    print(np.median(fractionsoftotalA),np.median(fractionsoftotalB),np.median(simpleratios))
+    print(np.mean(fractionsoftotalA),np.mean(fractionsoftotalB),np.mean(simpleratios))
+    print('Rough Predicted NS fraction: ', NSfrac_predicted_nobeam)
+    print('Observed NS fraction: ',NSfrac_observed,' +- ',NSfrac_observed_err)
+    
+    #Compute the predicted fraction in the NS dipole, accounting for the antenna beam
+    if beamfile:        
+        NSfrac_predicted_withbeam = LWAPolarizationResponse(zenithangle, azimuth,P,beamfile)
+        
+        return azimuth, zenithangle, rms_residual, P, NSfrac_predicted_nobeam, NSfrac_predicted_withbeam, NSfrac_observed, NSfrac_observed_err
+    return azimuth, zenithangle, rms_residual, P, NSfrac_predicted_nobeam, NSfrac_observed, NSfrac_observed_err
 
 
 #######################################################################################################################
