@@ -130,7 +130,7 @@ def main():
             pcovg=np.zeros((6,6))
             rms_res_g=0
             array_spatial_fit=0
-
+        
         #summarize results
         fitstats['arrival_zenith_angle'].append(poptt[0])
         fitstats['arrival_zenith_angle_err'].append(math.sqrt(pcovt[0,0]))
@@ -163,6 +163,9 @@ def main():
         fitstats['gauss_center_y_err'].append(math.sqrt(pcovg[5,5]))
 
         fitstats['gauss_fit_rms_res'].append(rms_res_g)
+        
+        fitstats['toa_fit_nant'].append(len(array_toa_fit))  #how many antennas are in the final iteration of the fit
+        fitstats['gauss_fit_nant'].append(len(array_spatial_fit)) #how many antennas are in the final iteration of the fit:
 
    ######### Add results to summary array and save results #####################################################################
 
@@ -187,6 +190,8 @@ def main():
     summarray=rfn.append_fields(summarray,'gauss_center_y',data=fitstats['gauss_center_y'],dtypes=float,usemask=False)
     summarray=rfn.append_fields(summarray,'gauss_center_y_err',data=fitstats['gauss_center_y_err'],dtypes=float,usemask=False)
     summarray=rfn.append_fields(summarray,'gauss_fit_rms_res',data=fitstats['gauss_fit_rms_res'],dtypes=float,usemask=False)
+    summarray=rfn.append_fields(summarray,'gauss_fit_nant',data=fitstats['gauss_fit_nant'],dtypes=float,usemask=False)
+    summarray=rfn.append_fields(summarray,'toa_fit_nant',data=fitstats['toa_fit_nant'],dtypes=float,usemask=False)
 
     #save summary array
     np.save(fname,summarray)
