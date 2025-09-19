@@ -91,6 +91,8 @@ def main():
     fitstats['gauss_center_y']=[]
     fitstats['gauss_center_y_err']=[]
     fitstats['gauss_fit_rms_res']=[]
+    fitstats['toa_fit_nant']=[]
+    fitstats['gauss_fit_nant']=[]
     
     #load each event and do fits
     for i in range(len(summarray)):
@@ -112,7 +114,7 @@ def main():
             pcovt=np.zeros((3,3))
             rms_res_t=0
             weightedresidual=0
-            array_toa_fit=0
+            array_toa_fit=[]
             reference=np.zeros(4)
         rms_weightedresidual=np.sqrt(np.mean(np.square(weightedresidual)))
 
@@ -129,7 +131,7 @@ def main():
             poptg=np.zeros(6)
             pcovg=np.zeros((6,6))
             rms_res_g=0
-            array_spatial_fit=0
+            array_spatial_fit=[]
         
         #summarize results
         fitstats['arrival_zenith_angle'].append(poptt[0])
