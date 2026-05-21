@@ -10,13 +10,17 @@ import scipy.stats as st
 import math
 import argparse
 import yaml
+from pathlib import Path
 
 parser=argparse.ArgumentParser(description='Parse raw cosmic ray trigger data files and make preliminary RFI rejection cuts.')
 parser.add_argument('config',type=str, help='Full path to configuration file')
-parser.add_argument('fname', type=str, help='File name of raw data file, not including file path (which is specified in config file)')
+parser.add_argument('outdir',type=str,help='Full path to directory where output files will go')
+parser.add_argument('fname', type=str, help='File name of raw data file, including file path.')
+
 args=parser.parse_args()
 fname = args.fname 
 config = args.config
+outdir = args.outdir
 
 def main():
     starttime=time.time()
@@ -25,9 +29,9 @@ def main():
     with open(config, 'r') as file:
         configuration=yaml.safe_load(file)
     #where to save data products
-    outdir=configuration['outdir']
-    datadir =configuration['datadir'] 
-    shortfname=fname[len(datadir):]
+    p = Path(fname)
+    shortfname = p.name
+    #shortfname=fname[len(datadir):]
     stop_index=configuration['stop_index']
     #name of csv file with antenna names and coordinates: Columns must have headings 'antname', 'x', 'y', 'elevation'
     array_map_filename=configuration['array_map_filename'] 

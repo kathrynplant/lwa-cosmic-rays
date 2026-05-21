@@ -15,9 +15,10 @@ import numpy.lib.recfunctions as rfn
 
 parser=argparse.ArgumentParser(description='Make preliminary RFI rejection cuts based on output of summarize_events.py.')
 parser.add_argument('config',type=str, help='Full path to configuration file')
+parser.add_argument('dataproductsdir',type=str,help='Full path to directory where output files will go')
 args=parser.parse_args()
 config = args.config
-
+dataproductsdir = args.dataproductsdir
 def main():
     starttime=time.time()
     print('Start time ',starttime)
@@ -25,7 +26,6 @@ def main():
     with open(config, 'r') as file:
         configuration=yaml.safe_load(file)
     #where to save data products
-    dataproductsdir=configuration['outdir']
     
     max_ants_bad_kurtosis=configuration['max_ants_bad_kurtosis']
     max_ants_bad_power=configuration['max_ants_bad_power']

@@ -14,10 +14,12 @@ import numpy.lib.recfunctions as rfn
 
 parser=argparse.ArgumentParser(description='Perform model fits on events specified in a summary file such as that output by summarize_events.py or impulsive_and_antquality_cuts.py. The model fits are a wavefront fit to the observed TOAs, to determine arrival direction parameters, and a Gaussian fit to the spatial distribution of measured SNRs. Results from these fits are appended as additional columns in the summary file.')
 parser.add_argument('config',type=str, help='Full path to configuration file')
+parser.add_argument('datadir',type=str,help='Path to directory containing the data files')
 parser.add_argument('fname', type=str, help='Full path to summary file')
 args=parser.parse_args()
 fname = args.fname 
 config = args.config
+datadir = args.datadir
 
 def main():
     starttime=time.time()
@@ -25,8 +27,6 @@ def main():
     ############################### set parameters -- read from a config file ######################################
     with open(config, 'r') as file:
         configuration=yaml.safe_load(file)
-    #where to save data products
-    datadir =configuration['datadir'] 
     #name of csv file with antenna names and coordinates: Columns must have headings 'antname', 'x', 'y', 'elevation'
     array_map_filename=configuration['array_map_filename'] 
     
