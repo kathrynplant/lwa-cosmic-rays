@@ -23,7 +23,7 @@ do
 
 	#prepare directories
 	mkdir $drive/cosmic-ray-data/new-dataproducts
-	cp /home/ubuntu/kp/lwa-cosmic-rays/config-gpu9.yml $drive/cosmic-ray-data/new-dataproducts/config.yml
+	#cp /home/ubuntu/kp/lwa-cosmic-rays/config-gpu9.yml $drive/cosmic-ray-data/new-dataproducts/config.yml
 	cd /home/ubuntu/kp/lwa-cosmic-rays
 
 	#Compute summary statistics for all complete events

@@ -1147,7 +1147,7 @@ def plothistograms(summary,nbins):
     #plt.xlabel('n_veto_detections')
     return
 
-def quickanalysis(datafile,index_in_file,configuration,namedict,arraymapdictionaries):
+def quickanalysis(datafile,index_in_file,configuration,namedict,arraymapdictionaries,summaryinfo=False):
     xdict=arraymapdictionaries[0]
     ydict=arraymapdictionaries[1]
     zdict=arraymapdictionaries[2]
@@ -1155,84 +1155,123 @@ def quickanalysis(datafile,index_in_file,configuration,namedict,arraymapdictiona
     #load data
     event_records=parsefile(datafile,start_ind=index_in_file,end_ind=704 )
     event_summary=summarize_signals(event_records,h,namedict,xdict,ydict,zdict)
-    event_summary_flagged=flag_antennas(event_summary,configuration['maximum_ok_power'], configuration['minimum_ok_power'],
-                                        configuration['minimum_ok_kurtosis'],configuration['maximum_ok_kurtosis'],1,
-    configuration['known_bad_antennas'])[0]
+    event_summary_flagged=flag_antennas(event_summary,
+                                        configuration['maximum_ok_power'], 
+                                        configuration['minimum_ok_power'],
+                                        configuration['minimum_ok_kurtosis'],
+                                        configuration['maximum_ok_kurtosis'],
+                                        configuration['max_saturated_samples'],
+                                        configuration['known_bad_antennas'])[0]
+    pwr_ok_and_not_known_bad=flag_antennas(event_summary,
+                                     configuration['maximum_ok_power'], 
+                                     configuration['minimum_ok_power'],
+                                     -1e10,
+                                     1e10,
+                                     1e10,
+                                     configuration['known_bad_antennas'])[0]
 
-    #TOA fit
-    poptt,pcovt,rms_res_t,weightedresidual,array_toa_fit,reference=robust_direction_fit(event_summary_flagged[event_summary_flagged['snr']>5.5],niter=3,outlier_limit=4,plot=False,toa_func=toa_sphere,fitbounds=([0,0,1],[90,360,1e8]),weightbysnr=True)#poptt,pcovt=robust_direction_fit(event_summary_flagged[event_summary_flagged['snr']>6],niter=3,outlier_limit=4,plot=False,toa_func=toa_plane,fitbounds=([0,0],[90,360]))
+    #Apply delay calibration and select antennas above SNR threshold
+    delaycaltable = np.load(configuration['delay_caltable'])
+    arrayforfit=apply_delay_cal(event_summary_flagged, delaycaltable,configuration['minsnr'],signflip=True)
 
-    rms_weightedresidual=np.sqrt(np.mean(np.square(weightedresidual)))
-    
-    #Gaussian fit -- choose the brighter polarization
-    meansnrA=np.mean(event_summary_flagged[event_summary_flagged['pol']=='A']['snr'])
-    meansnrB=np.mean(event_summary_flagged[event_summary_flagged['pol']=='B']['snr'])
-    if meansnrA>meansnrB:
-        summary_array = event_summary_flagged[np.logical_and(event_summary_flagged['snr']>5.5,event_summary_flagged['pol']=='A')]
-    else:
-        summary_array = event_summary_flagged[np.logical_and(event_summary_flagged['snr']>5.5,event_summary_flagged['pol']=='B')]
+    ### Fit information
+    if summaryinfo:
+        arrival_zenith_angle=summaryinfo['arrival_zenith_angle']
+        arrival_zenith_angle_err=summaryinfo['arrival_zenith_angle_err']
+        arrival_azimuth=summaryinfo['arrival_azimuth']
+        arrival_azimuth_err=summaryinfo['arrival_azimuth_err']
+        source_distance=summaryinfo['source_distance']
+        source_distance_err=summaryinfo['source_distance_err']
+        toa_fit_rms_res=summaryinfo['toa_fit_rms_res']
+        weightedres=summaryinfo['weightedres']
+        gauss_amp=summaryinfo['gauss_amp']
+        gauss_amp_err=summaryinfo['gauss_amp_err']
+        gauss_azimuth=summaryinfo['gauss_azimuth']
+        gauss_azimuth_err=summaryinfo['gauss_azimuth_err']
+        gauss_lateral_scale=summaryinfo['gauss_lateral_scale']
+        gauss_lateral_scale_err=summaryinfo['gauss_lateral_scale_err']
+        gauss_aspect_ratio=summaryinfo['gauss_aspect_ratio']
+        gauss_aspect_ratio_err=summaryinfo['gauss_aspect_ratio_err']
+        gauss_center_x=summaryinfo['gauss_center_x']
+        gauss_center_x_err=summaryinfo['gauss_center_x_err']
+        gauss_center_y=summaryinfo['gauss_center_y']
+        gauss_center_y_err=summaryinfo['gauss_center_y_err']
+        gauss_fit_rms_res=summaryinfo['gauss_fit_rms_res']
 
-    poptg,pcovg,rms_res_g,array_spatial_fit=robust_spatial_fit(summary_array,1,4,gauss2d,([0,0,0,1,-10000,-10000],[50,180,1000,100,10000,10000]),plot=False)
+        array_toa_fit = arrayforfit
+        array_spatial_fit = arrayforfit
+    else:  #If summary info is not provided, do a fit
+        #TOA fit
+        poptt,pcovt,rms_res_t,weightedresidual,array_toa_fit,reference=robust_direction_fit(arrayforfit,niter=3,outlier_limit=4,plot=False,toa_func=toa_sphere,fitbounds=([0,0,1],[90,360,1e8]),weightbysnr=True,usecolumn='tpeak_rel')#poptt,pcovt=robust_direction_fit(event_summary_flagged[event_summary_flagged['snr']>6],niter=3,outlier_limit=4,plot=False,toa_func=toa_plane,fitbounds=([0,0],[90,360]))
+        rms_weightedresidual=np.sqrt(np.mean(np.square(weightedresidual)))
 
-    #summarize results
-    fitstats={}
-    fitstats['arrival_zenith_angle']=poptt[0]
-    fitstats['arrival_zenith_angle_err']=math.sqrt(pcovt[0,0])
+        #Gaussian fit 
+        #note that arrayforfit is already filtered for the brightest polarization
+        poptg,pcovg,rms_res_g,array_spatial_fit=robust_spatial_fit(arrayforfit,1,4,gauss2d,([0,0,0,1,-10000,-10000],[50,180,1000,100,10000,10000]),plot=False)
 
-    fitstats['arrival_azimuth']=poptt[1]
-    fitstats['arrival_azimuth_err']=pcovt[1,1]
+        #summarize results
+        arrival_zenith_angle=poptt[0]
+        arrival_zenith_angle_err=math.sqrt(pcovt[0,0])
+        arrival_azimuth=poptt[1]
+        arrival_azimuth_err=pcovt[1,1]
+        source_distance=poptt[2]
+        source_distance_err=pcovt[2,2]
+        toa_fit_rms_res=rms_res_t
+        weightedres=rms_weightedresidual
+        gauss_amp=poptg[0]
+        gauss_amp_err=math.sqrt(pcovg[0,0])
+        gauss_azimuth=poptg[1]
+        gauss_azimuth_err=pcovg[1,1]
+        gauss_lateral_scale=poptg[2]
+        gauss_lateral_scale_err=pcovg[2,2]
+        gauss_aspect_ratio=poptg[3]
+        gauss_aspect_ratio_err=math.sqrt(pcovg[3,3])
+        gauss_center_x=poptg[4]
+        gauss_center_x_err=pcovg[4,4]
+        gauss_center_y=poptg[5]
+        gauss_center_y_err=pcovg[5,5]
+        gauss_fit_rms_res=rms_res_g
 
-    fitstats['source_distance']=poptt[2]
-    fitstats['source_distance_err']=pcovt[2,2]
-
-    fitstats['toa_fit_rms_res']=rms_res_t
-    fitstats['weightedres']=rms_weightedresidual
-
-    fitstats['gauss_amp']=poptg[0]
-    fitstats['gauss_amp_err']=math.sqrt(pcovg[0,0])
-
-    fitstats['gauss_azimuth']=poptg[1]
-    fitstats['gauss_azimuth_err']=pcovg[1,1]
-
-    fitstats['gauss_lateral_scale']=poptg[2]
-    fitstats['gauss_lateral_scale_err']=pcovg[2,2]
-
-    fitstats['gauss_aspect_ratio']=poptg[3]
-    fitstats['gauss_aspect_ratio_err']=math.sqrt(pcovg[3,3])
-
-    fitstats['gauss_center_x']=poptg[4]
-    fitstats['gauss_center_x_err']=pcovg[4,4]
-
-    fitstats['gauss_center_y']=poptg[5]
-    fitstats['gauss_center_y_err']=pcovg[5,5]
-
-    fitstats['gauss_fit_rms_res']=rms_res_g
-    
-    
-    print('arrival direction azimuth ',round(fitstats['arrival_azimuth'],3),'+-',round(fitstats['arrival_azimuth_err'],3), 'degree')
-    print('Gaussian semimajor axis azimuth ',round(fitstats['gauss_azimuth'],3),'+-',round(fitstats['gauss_azimuth_err'],3), 'degree')
-    print('Arrival direction ZA ', round(fitstats['arrival_zenith_angle'],3),'+-',round(fitstats['arrival_zenith_angle_err'],3), 'degree')
-    print('Gaussian aspect ratio ', round(fitstats['gauss_aspect_ratio'],3),'+-',round(fitstats['gauss_aspect_ratio_err'],3))
-    print('Gaussian fit rms residual ',round(fitstats['gauss_fit_rms_res'],3))
-    print('TOA fit rms residual ', round(fitstats['toa_fit_rms_res'],3), 'rms of residual weighted by snr', fitstats['weightedres'])
+    print('arrival direction azimuth ',round(arrival_azimuth,3),'+-',round(arrival_azimuth_err,3), 'degree')
+    print('Gaussian semimajor axis azimuth ',round(gauss_azimuth,3),'+-',round(gauss_azimuth_err,3), 'degree')
+    print('Arrival direction ZA ', round(arrival_zenith_angle,3),'+-',round(arrival_zenith_angle_err,3), 'degree')
+    print('Gaussian aspect ratio ', round(gauss_aspect_ratio,3),'+-',round(gauss_aspect_ratio_err,3))
+    print('Gaussian fit rms residual ',round(gauss_fit_rms_res,3))
+    print('TOA fit rms residual ', round(toa_fit_rms_res,3), 'rms of residual weighted by snr', weightedres)
 
     #Do plots
     #SNR both polarizations
     plt.figure(figsize=(15,7),dpi=150)
+    plt.suptitle('Signal to noise ratio at each antenna')
     plt.subplot(121)
     plt.title('A')
+    plt.scatter(event_summary['x'],event_summary['y'],marker = 'x',color='k',s=20)
+    plt.scatter(pwr_ok_and_not_known_bad['x'],pwr_ok_and_not_known_bad['y'],marker = 's',color='red',s=20)
     event_scatter_plot(event_summary_flagged,'snr',-105,105,-105,105,'A',annotate=True,markerscale=10,scale='linear',colorlimits='auto')
+    plt.ylabel('N-S position [m]')
+
     plt.subplot(122)
     plt.title('B')
+    plt.scatter(event_summary['x'],event_summary['y'],marker = 'x',color='k',s=20)
+    plt.scatter(pwr_ok_and_not_known_bad['x'],pwr_ok_and_not_known_bad['y'],marker = 's',color='red',s=20)
     event_scatter_plot(event_summary_flagged,'snr',-105,105,-105,105,'B',annotate=True,markerscale=10,scale='linear',colorlimits='auto')
 
     plt.figure(figsize=(15,7),dpi=150)
     plt.subplot(121)
     plt.title('A')
+    plt.scatter(event_summary['x'],event_summary['y'],marker = 'x',color='k',s=10)
+    plt.scatter(pwr_ok_and_not_known_bad['x'],pwr_ok_and_not_known_bad['y'],marker = 's',color='red',s=15)
     event_scatter_plot(event_summary_flagged,'snr',-1500,750,-1000,1200,'A',annotate=False,markerscale=10,scale='linear',colorlimits='auto')
+    plt.xlabel('E-W position [m]')
+    plt.ylabel('N-S position [m]')
+
     plt.subplot(122)
     plt.title('B')
+    plt.scatter(event_summary['x'],event_summary['y'],marker = 'x',color='k',s=10)
+    plt.scatter(pwr_ok_and_not_known_bad['x'],pwr_ok_and_not_known_bad['y'],marker = 's',color='red',s=15)
     event_scatter_plot(event_summary_flagged,'snr',-1500,750,-1000,1200,'B',annotate=False,markerscale=10,scale='linear',colorlimits='auto')
+    plt.xlabel('E-W position [m]')
+
 
     #waveform plot
     brightest_antenna=event_summary_flagged[np.argmax(event_summary_flagged['snr'])]
@@ -1245,31 +1284,36 @@ def quickanalysis(datafile,index_in_file,configuration,namedict,arraymapdictiona
     waveform_compare_plot(event_records,brightest_antenna['antname']+pol2,brightest_antenna['antname']+pol1,h)
 
     #Plot SNR Gauss fit
-    ant_coords=np.zeros((2,len(array_spatial_fit)))
+    array_spatial_fit = arrayforfit  #Plot fit against all antennas used in the fit, without flagging the outliers identified in the fit process
+    ant_coords=np.zeros((2,len(array_spatial_fit))) #TODO define array_spatial_fit (can be arrayforfit)
     ant_coords[0,:]=array_spatial_fit['x']
     ant_coords[1,:]=array_spatial_fit['y']
     snr=array_spatial_fit['snr']
-    best_model_snrs=gauss2d(ant_coords,*poptg)
+    best_model_snrs=gauss2d(ant_coords,gauss_amp,gauss_azimuth,gauss_lateral_scale,gauss_aspect_ratio, gauss_center_x, gauss_center_y)
     residual_g=snr-best_model_snrs
     plot_fit(array_spatial_fit['x'],array_spatial_fit['y'],snr,best_model_snrs,residual_g,np.min(snr),np.max(snr),'Gaussian fit')
 
     #Plot Toa fit
-    x=array_toa_fit['x'] - reference[0]
+    array_toa_fit = arrayforfit #Plot fit against all antennas used in the fit, without flagging the outliers identified in the fit process
+    reference = (array_toa_fit['x'][0],array_toa_fit['y'][0],array_toa_fit['z'][0],array_toa_fit['tpeak_calibrated'][0]) #for now, use 1st antenna as reference
+    x=array_toa_fit['x'] - reference[0] 
     y=array_toa_fit['y'] - reference[1]
     z=array_toa_fit['z'] - reference[2]
-    t=array_toa_fit['tpeak_rel'] -reference[3]
+    t=array_toa_fit['tpeak_calibrated'] -reference[3]
 
     ant_coords=np.zeros((3,len(x)))
     ant_coords[0,:]=x
     ant_coords[1,:]=y
     ant_coords[2,:]=z
-
-    best_model_toas=toa_sphere(ant_coords,*poptt)
+    best_model_toas=toa_sphere(ant_coords,arrival_zenith_angle,arrival_azimuth,source_distance)
     residual_t=t-best_model_toas
-    plot_fit(ant_coords[0,:],ant_coords[1,:],t,best_model_toas,residual_t,-100,100,'Wavefront fit')
 
+    plot_fit(x,y,t,best_model_toas,residual_t,-100,100,'Wavefront fit')
+    plt.clim(-2,2) #truncate color scale on last subplot to make residual gradients easier to see
     return
-########################## snapshot plotting functions  ##########################################################
+
+
+########################### snapshot plotting functions  ##########################################################
 def waveform_compare_plot(event_records,antA,antB,h):
     #plot filtered voltage timeseries and Hilbert envelope for two signals overlaid, with three levels of zoom around the peak
     #antA and antB are the full names including polarization of the two antennas to compare. 
