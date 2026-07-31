@@ -1169,7 +1169,8 @@ def quickanalysis(datafile,index_in_file,configuration,namedict,arraymapdictiona
                                      1e10,
                                      1e10,
                                      configuration['known_bad_antennas'])[0]
-
+    pwr_ok_and_not_known_bad_A = pwr_ok_and_not_known_bad[pwr_ok_and_not_known_bad['pol']=='A']
+    pwr_ok_and_not_known_bad_B = pwr_ok_and_not_known_bad[pwr_ok_and_not_known_bad['pol']=='B']
     #Apply delay calibration and select antennas above SNR threshold
     delaycaltable = np.load(configuration['delay_caltable'])
     arrayforfit=apply_delay_cal(event_summary_flagged, delaycaltable,configuration['minsnr'],signflip=True)
@@ -1240,27 +1241,28 @@ def quickanalysis(datafile,index_in_file,configuration,namedict,arraymapdictiona
     print('TOA fit rms residual ', round(toa_fit_rms_res,3), 'rms of residual weighted by snr', weightedres)
 
     #Do plots
+        #Do plots
     #SNR both polarizations
     plt.figure(figsize=(15,7),dpi=150)
     plt.suptitle('Signal to noise ratio at each antenna')
     plt.subplot(121)
     plt.title('A')
     plt.scatter(event_summary['x'],event_summary['y'],marker = 'x',color='k',s=20)
-    plt.scatter(pwr_ok_and_not_known_bad['x'],pwr_ok_and_not_known_bad['y'],marker = 's',color='red',s=20)
+    plt.scatter(pwr_ok_and_not_known_bad_A['x'],pwr_ok_and_not_known_bad_A['y'],marker = 's',color='red',s=20)
     event_scatter_plot(event_summary_flagged,'snr',-105,105,-105,105,'A',annotate=True,markerscale=10,scale='linear',colorlimits='auto')
     plt.ylabel('N-S position [m]')
 
     plt.subplot(122)
     plt.title('B')
     plt.scatter(event_summary['x'],event_summary['y'],marker = 'x',color='k',s=20)
-    plt.scatter(pwr_ok_and_not_known_bad['x'],pwr_ok_and_not_known_bad['y'],marker = 's',color='red',s=20)
+    plt.scatter(pwr_ok_and_not_known_bad_B['x'],pwr_ok_and_not_known_bad_B['y'],marker = 's',color='red',s=20)
     event_scatter_plot(event_summary_flagged,'snr',-105,105,-105,105,'B',annotate=True,markerscale=10,scale='linear',colorlimits='auto')
-
+    
     plt.figure(figsize=(15,7),dpi=150)
     plt.subplot(121)
     plt.title('A')
     plt.scatter(event_summary['x'],event_summary['y'],marker = 'x',color='k',s=10)
-    plt.scatter(pwr_ok_and_not_known_bad['x'],pwr_ok_and_not_known_bad['y'],marker = 's',color='red',s=15)
+    plt.scatter(pwr_ok_and_not_known_bad_A['x'],pwr_ok_and_not_known_bad_A['y'],marker = 's',color='red',s=20)
     event_scatter_plot(event_summary_flagged,'snr',-1500,750,-1000,1200,'A',annotate=False,markerscale=10,scale='linear',colorlimits='auto')
     plt.xlabel('E-W position [m]')
     plt.ylabel('N-S position [m]')
@@ -1268,7 +1270,7 @@ def quickanalysis(datafile,index_in_file,configuration,namedict,arraymapdictiona
     plt.subplot(122)
     plt.title('B')
     plt.scatter(event_summary['x'],event_summary['y'],marker = 'x',color='k',s=10)
-    plt.scatter(pwr_ok_and_not_known_bad['x'],pwr_ok_and_not_known_bad['y'],marker = 's',color='red',s=15)
+    plt.scatter(pwr_ok_and_not_known_bad_B['x'],pwr_ok_and_not_known_bad_B['y'],marker = 's',color='red',s=20)
     event_scatter_plot(event_summary_flagged,'snr',-1500,750,-1000,1200,'B',annotate=False,markerscale=10,scale='linear',colorlimits='auto')
     plt.xlabel('E-W position [m]')
 
